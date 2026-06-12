@@ -310,7 +310,7 @@ async function persistToSupabase() {
   if (window._realtimeLastSave) window._realtimeLastSave();
   showSync('saving');
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/weekly_data`, {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/weekly_data`, {
       method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
@@ -325,8 +325,16 @@ async function persistToSupabase() {
         updated_at: new Date().toISOString()
       })
     });
-    showSync('saved');
+    if (!res.ok) {
+      const text = await res.text();
+      console.error('Save failed:', res.status, text);
+      showSync('error');
+    } else {
+      console.log('Saved OK', res.status);
+      showSync('saved');
+    }
   } catch(e) {
+    console.error('Save error:', e);
     showSync('error');
   }
 }
