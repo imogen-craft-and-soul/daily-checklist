@@ -1605,7 +1605,7 @@ function renderBookingPlan(groups) {
     meta.style.cssText = `display:flex;gap:4px;align-items:center;margin-top:2px;${isDone?'opacity:0.5;':''}`;
     meta.innerHTML = `<span style="font-size:11px;color:var(--ink-mid);">👥 ${g.count}</span>
       ${g.isPAP?'<span style="font-size:10px;font-weight:500;color:#712B13;background:#F5C4B3;padding:1px 4px;border-radius:3px;">PAP</span>':''}
-      ${g.isCB?'<span style="font-size:10px;font-weight:500;color:#0C447C;background:#B5D4F4;padding:1px 4px;border-radius:3px;">CB</span>':''}`);
+      ${g.isCB?'<span style="font-size:10px;font-weight:500;color:#0C447C;background:#B5D4F4;padding:1px 4px;border-radius:3px;">CB</span>':''}`;;
     info.appendChild(name);
     info.appendChild(meta);
 
