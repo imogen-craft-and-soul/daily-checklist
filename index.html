@@ -779,7 +779,7 @@ function renderToday() {
         </div>
         <div style="display:flex;align-items:center;gap:8px;">${statusBadge}<span style="font-size:11px;color:var(--ink-mid);transition:transform 0.2s;" class="oc-chev-today">▼</span></div>
       </div>
-      <div class="oc-body-today" style="display:${allDone?'none': type==='closing' ? 'none' : 'block'};padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
+      <div class="oc-body-today" style="display:${allDone?'none':'block'};padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
         <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:8px 0 4px;overflow:hidden;"><div style="height:100%;border-radius:99px;background:${dotCol};width:${pct}%;"></div></div>
         <div style="font-size:11px;color:var(--ink-mid);margin-bottom:8px;">${done} of ${tasks.length} done</div>
         <div id="today-oc-${type}"></div>
