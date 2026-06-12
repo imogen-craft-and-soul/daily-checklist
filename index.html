@@ -31,9 +31,10 @@
   #sync-indicator.error { background: #FAECE7; color: #993C1D; opacity: 1; }
 
   /* NAV */
-  .nav { display: flex; background: var(--ink); position: sticky; top: 0; z-index: 100; }
-  .nav-btn { flex: 1; padding: 14px 8px; font-size: 13px; font-weight: 500; color: rgba(255,255,255,0.5); background: none; border: none; cursor: pointer; letter-spacing: 0.03em; transition: color 0.15s; }
-  .nav-btn.active { color: #fff; border-bottom: 2px solid var(--clay); }
+  .nav { display: flex; background: var(--ink); position: sticky; top: 0; z-index: 100; padding: 0 4px; gap: 4px; }
+  .nav-btn { flex: 1; padding: 10px 6px; font-size: 11px; font-weight: 500; color: rgba(255,255,255,0.45); background: none; border: none; cursor: pointer; letter-spacing: 0.02em; transition: all 0.15s; border-radius: 8px 8px 0 0; line-height: 1.3; }
+  .nav-btn .nav-icon { display: block; font-size: 16px; margin-bottom: 2px; }
+  .nav-btn.active { color: #fff; background: rgba(255,255,255,0.12); border-bottom: 2.5px solid var(--clay); }
 
   /* VIEWS */
   .view { display: none; padding: 16px; }
@@ -209,9 +210,9 @@
 <canvas id="confetti-canvas"></canvas>
 
 <nav class="nav">
-  <button class="nav-btn active" onclick="switchView('today')">Today</button>
-  <button class="nav-btn" onclick="switchView('bookings')">Bookings</button>
-  <button class="nav-btn" onclick="switchView('manager')">Summary</button>
+  <button class="nav-btn active" onclick="switchView('today')"><span class="nav-icon">☀️</span>Today</button>
+  <button class="nav-btn" onclick="switchView('bookings')"><span class="nav-icon">🗓️</span>Bookings</button>
+  <button class="nav-btn" onclick="switchView('manager')"><span class="nav-icon">💡</span>Summary</button>
 </nav>
 
 <div id="today-view" class="view active">
@@ -825,14 +826,23 @@ function renderToday() {
   function buildTaskSection() {
     const tasks = tasksForDay(selectedDay);
     const isCatchupDay = CATCHUP_DAYS.has(selectedDay);
-    const doneCount = isCatchupDay ? 0 : tasks.filter(t => checked[key(t.originalDay||selectedDay, t.name)]).length;
-    const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 100;
+    const dayCustom = customTasks[selectedDay] || [];
+    const doneCount = isCatchupDay ? 0 : tasks.filter(t => checked[key(t.originalDay||selectedDay, t.name)]).length
+      + dayCustom.filter(t => t.done).length;
+    const totalCount = isCatchupDay ? tasks.length : tasks.length + dayCustom.length;
+    const pct = totalCount ? Math.round(doneCount/totalCount*100) : 100;
 
     const wrap = document.createElement('div');
     wrap.style.cssText = 'background:#F0FAF3;border:1px solid #C0E8CC;border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
 
     const groups = {P0:[],P1:[],P2:[]};
-    tasks.forEach(t => groups[t.priority].push(t));
+    tasks.forEach(t => groups[t.priority].push({...t, isCustom:false}));
+
+    // Merge custom tasks into the same groups
+    dayCustom.forEach(t => {
+      if (groups[t.priority]) groups[t.priority].push({...t, isCustom:true, name:t.name, type:'', time:''});
+    });
+
     const typeOrder = {'Pottery delivery':0,'Clean':1,'Organise':2,'Stock count':3,'Garden':4};
     const sortGroup = arr => arr.sort((a,b)=>{const s=(a.sortOrder??99)-(b.sortOrder??99);return s!==0?s:(typeOrder[a.type]??99)-(typeOrder[b.type]??99);});
     ['P0','P1','P2'].forEach(p=>sortGroup(groups[p]));
@@ -845,13 +855,13 @@ function renderToday() {
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayTasks(this)">
         <div style="font-size:14px;font-weight:500;color:var(--ink);">Tasks</div>
         <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--ink-mid);">${doneCount}/${tasks.length}</span>
+          <span style="font-size:12px;color:var(--ink-mid);">${doneCount}/${totalCount}</span>
           <span style="font-size:11px;color:var(--ink-mid);" class="tasks-chev">▼</span>
         </div>
       </div>
       <div id="today-task-inner" style="padding:0 14px 12px;">
         <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:10px 0 4px;overflow:hidden;"><div id="today-prog-fill" style="height:100%;border-radius:99px;background:${progressColor(pct)};width:${pct}%;transition:width 0.4s;"></div></div>
-        <div style="font-size:11px;color:var(--ink-mid);margin-bottom:10px;" id="today-prog-lbl">${doneCount} of ${tasks.length} tasks done</div>
+        <div style="font-size:11px;color:var(--ink-mid);margin-bottom:10px;" id="today-prog-lbl">${doneCount} of ${totalCount} tasks done</div>
         <div id="today-task-list"></div>
       </div>`;
     el.appendChild(wrap);
@@ -872,46 +882,25 @@ function renderToday() {
         list.appendChild(sec);
 
         groups[p].forEach(t => {
-          const srcDay = isCatchupDay ? t.originalDay : selectedDay;
-          const k2 = key(srcDay, t.name);
-          const isDone = !!checked[k2];
           const card = document.createElement('div');
-          card.className = 'task'+(isDone?' done':'');
-          card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div><div class="task-meta">${t.time?`<span class="badge badge-time">${t.time}</span>`:''}<span class="badge badge-type-${typeBadgeClass(t.type)}">${t.type}</span></div></div>`;
-          card.onclick = () => { checked[k2]=!checked[k2]; save(); renderToday(); renderStaff(); };
-          list.appendChild(card);
-        });
-      });
-    }
-    // Custom tasks for this day
-    const dayCustom = customTasks[selectedDay] || [];
-    const pLabels2 = {P0:'Must do', P1:'Important', P2:'Last up'};
-    const pColors  = {P0:'var(--clay)', P1:'var(--amber)', P2:'var(--blue)'};
-
-    if (dayCustom.length > 0) {
-      ['P0','P1','P2'].forEach(p => {
-        const group = dayCustom.filter(t => t.priority === p);
-        if (!group.length) return;
-
-        const groupWrap = document.createElement('div');
-        groupWrap.style.cssText = `background:${pBg[p]};border:1px solid ${pBorder[p]};border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;`;
-
-        const sec = document.createElement('div');
-        sec.className = 'section-head';
-        sec.textContent = pLabels2[p] + ' (added)';
-        list.appendChild(sec);
-
-        group.forEach(t => {
-          const card = document.createElement('div');
-          card.className = 'task' + (t.done ? ' done' : '');
-          card.style.cssText = 'position:relative;';
-          const delBtn = document.createElement('button');
-          delBtn.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;color:var(--ink-mid);cursor:pointer;padding:4px;line-height:1;';
-          delBtn.textContent = '×';
-          delBtn.onclick = (e) => { e.stopPropagation(); deleteCustomTask(selectedDay, t.id); };
-          card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div></div>`;
-          card.appendChild(delBtn);
-          card.onclick = () => toggleCustomTask(selectedDay, t.id);
+          if (t.isCustom) {
+            card.className = 'task' + (t.done ? ' done' : '');
+            card.style.cssText = 'position:relative;';
+            const delBtn = document.createElement('button');
+            delBtn.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;color:var(--ink-mid);cursor:pointer;padding:4px;line-height:1;';
+            delBtn.textContent = '×';
+            delBtn.onclick = (e) => { e.stopPropagation(); deleteCustomTask(selectedDay, t.id); };
+            card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div></div>`;
+            card.appendChild(delBtn);
+            card.onclick = () => toggleCustomTask(selectedDay, t.id);
+          } else {
+            const srcDay = isCatchupDay ? t.originalDay : selectedDay;
+            const k2 = key(srcDay, t.name);
+            const isDone = !!checked[k2];
+            card.className = 'task'+(isDone?' done':'');
+            card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div><div class="task-meta">${t.time?`<span class="badge badge-time">${t.time}</span>`:''}<span class="badge badge-type-${typeBadgeClass(t.type)}">${t.type}</span></div></div>`;
+            card.onclick = () => { checked[k2]=!checked[k2]; save(); renderToday(); renderStaff(); };
+          }
           list.appendChild(card);
         });
       });
@@ -1227,16 +1216,25 @@ function renderManager() {
       .map(d => ({d, text:(notes[d]||{})[fkey]}))
       .filter(e => e.text);
     if (!entries.length) return;
-    notesHTML += `<div style="margin-bottom:14px;">
-      <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:6px;">${label}</div>
-      ${entries.map(e=>`<div style="display:flex;gap:8px;margin-bottom:5px;">
-        <div style="font-size:10px;font-weight:500;color:var(--ink-mid);min-width:22px;padding-top:2px;">${e.d}</div>
-        <div style="font-size:12px;color:var(--ink);line-height:1.5;">${e.text}</div>
-      </div>`).join('')}
-    </div>`;
+
+    const icons = {well:'✅', improve:'💡', ideas:'🛒'};
+    const icon = fkey==='well' ? '✅' : fkey==='improve' ? '💡' : '🛒';
+
+    notesHTML += `
+      <div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
+        <div style="padding:10px 14px 8px;border-bottom:0.5px solid var(--ink-faint);display:flex;align-items:center;gap:7px;">
+          <span style="font-size:14px;">${icon}</span>
+          <span style="font-size:12px;font-weight:500;color:var(--ink);">${label}</span>
+        </div>
+        ${entries.map(e => `
+          <div style="display:flex;gap:10px;padding:9px 14px;border-bottom:0.5px solid var(--ink-faint);">
+            <div style="flex-shrink:0;width:28px;height:20px;background:var(--ink-faint);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--ink-mid);margin-top:1px;">${e.d}</div>
+            <div style="font-size:13px;color:var(--ink);line-height:1.5;flex:1;">${e.text}</div>
+          </div>`).join('')}
+      </div>`;
   });
   if (notesHTML) {
-    notesEl.innerHTML = `<div style="height:0.5px;background:var(--ink-faint);margin-bottom:14px;"></div>${notesHTML}`;
+    notesEl.innerHTML = `<div style="height:0.5px;background:var(--ink-faint);margin:4px 0 14px;"></div>${notesHTML}`;
   } else {
     notesEl.innerHTML = '';
   }
