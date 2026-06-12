@@ -613,8 +613,39 @@ function renderToday() {
     .map(([type, count]) => typeRowHTML(type, count))
     .join('');
 
-  const thuLeftover = isCatchup ? tasksForDay(selectedDay) : [];
-  const catchupSources = (CATCHUP_SOURCES[selectedDay]||[]).join(' & ');
+  // Booking summary from cached calendar data
+  const todayDateKey = new Date().toISOString().split('T')[0];
+  let bookingSummary = null;
+  if (cachedBookingGroups && cachedBookingGroups.length) {
+    const todayGroups = cachedBookingGroups.filter(g => g.startTime.startsWith(todayDateKey));
+    if (todayGroups.length) {
+      const totalBookingCrafters = todayGroups.reduce((s,g) => s+g.count, 0);
+      // Find peak concurrent slot — group by overlapping time windows
+      const slots = {};
+      todayGroups.forEach(g => {
+        const sk = slotKey(g);
+        if (!slots[sk]) slots[sk] = 0;
+        slots[sk] += g.count;
+      });
+      const peakCount = Math.max(...Object.values(slots));
+      const peakTime = Object.entries(slots).find(([,v])=>v===peakCount);
+      const peakLabel = peakTime ? formatTime(peakTime[0].split('|')[0]) : null;
+      bookingSummary = {total: todayGroups.length, crafters: totalBookingCrafters, peak: peakCount, peakTime: peakLabel};
+    }
+  }
+
+  const bookingRowHTML = bookingSummary
+    ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:15px;line-height:1;">🎨</span>
+          <div style="font-size:13px;color:var(--ink);">Bookings</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:5px;">
+          <span style="font-size:12px;color:var(--ink-mid);">${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafters</span>
+          ${bookingSummary.peak >= 15 ? `<span style="font-size:11px;font-weight:500;padding:2px 7px;border-radius:99px;background:#FAECE7;color:#993C1D;">🔥 Busy at ${bookingSummary.peakTime}</span>` : ''}
+        </div>
+      </div>`
+    : '';
 
   const catchupLeftoverHTML = isCatchup ? typeRowHTML('↩ Leftover tasks', thuLeftover.length, {bg:'var(--amber-light)',color:'var(--amber)'}, thuLeftover.length) : '';
 
@@ -637,6 +668,7 @@ function renderToday() {
         <div style="height:100%;border-radius:99px;background:${progressColor(totalTasks?Math.round(doneTasks/totalTasks*100):0)};width:${totalTasks?Math.round(doneTasks/totalTasks*100):0}%;transition:width 0.4s;"></div>
       </div>` : ''}
       ${statusRowHTML('🌅', 'Open', ocOpenDone)}
+      ${bookingRowHTML}
       ${isCatchup
         ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
             <div style="display:flex;align-items:center;gap:8px;">
@@ -1331,7 +1363,7 @@ const TABLES = [
   {id:'back',   name:'Back table',   cap:'8–10', maxSeats:10, color:'back'},
 ];
 
-const GCAL_CLIENT_ID = '564490971689-2qjh44r2oin0cs5idr7no0grrcpsks2o.apps.googleusercontent.com';
+const GCAL_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';
 const GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
 const GCAL_ID = 'imogen@craft-and-soul.com';
 
@@ -1392,16 +1424,285 @@ function setAssignment(slotK, groupKey, tableId) {
 }
 
 function autoAssign(groups) {
+  // Table config: id, maxSeats, canShare (Back cannot share)
+  const T = [
+    {id:'main',   seats:10, shareable:true},
+    {id:'corner', seats:6,  shareable:true},
+    {id:'window', seats:6,  shareable:true},
+    {id:'back',   seats:10, shareable:false},
+  ];
+  // Allowed split pairs for groups >12 (adjacent only, no back)
+  const SPLIT_PAIRS = [['main','corner'],['corner','window']];
+
   const slots = {};
   groups.forEach(g => { const sk=slotKey(g); if(!slots[sk]) slots[sk]=[]; slots[sk].push(g); });
+
   Object.entries(slots).forEach(([sk, slotGroups]) => {
-    const taken = new Set(Object.values(tableAssignments[sk]||{}));
+    // Track seat usage per table this slot: {tableId: seatsUsed}
+    const usage = {};
+    T.forEach(t => { usage[t.id] = 0; });
+    // Carry over existing assignments
+    Object.entries(tableAssignments[sk]||{}).forEach(([gk, tid]) => {
+      const g = slotGroups.find(g => g.key.replace(/["|]/g,'_') === gk || g.key === gk);
+      if (g) usage[tid] = (usage[tid]||0) + g.count;
+    });
+
     slotGroups.forEach(g => {
-      if (getAssignment(sk, g.key)) return;
-      const free = TABLES.find(t => !taken.has(t.id));
-      if (free) { setAssignment(sk, g.key, free.id); taken.add(free.id); }
+      if (getAssignment(sk, g.key)) return; // already assigned
+
+      if (g.count > 12) {
+        // Try split pair
+        const pair = SPLIT_PAIRS.find(([a,b]) => {
+          const ta = T.find(t=>t.id===a), tb = T.find(t=>t.id===b);
+          return (usage[a]||0) + g.count <= ta.seats + tb.seats &&
+                 (usage[a]||0) === 0 && (usage[b]||0) === 0;
+        });
+        if (pair) {
+          setAssignment(sk, g.key, pair[0]); // primary table
+          // Record split onto second table in a separate key
+          if (!tableAssignments[sk]) tableAssignments[sk] = {};
+          tableAssignments[sk][g.key + '__split'] = pair[1];
+          const ta = T.find(t=>t.id===pair[0]), tb = T.find(t=>t.id===pair[1]);
+          const seatsOnA = Math.min(g.count, ta.seats - (usage[pair[0]]||0));
+          usage[pair[0]] = (usage[pair[0]]||0) + seatsOnA;
+          usage[pair[1]] = (usage[pair[1]]||0) + (g.count - seatsOnA);
+          return;
+        }
+      }
+
+      // Normal assignment: find table with enough free seats
+      const free = T.find(t => (t.seats - (usage[t.id]||0)) >= g.count);
+      if (free) { setAssignment(sk, g.key, free.id); usage[free.id] = (usage[free.id]||0) + g.count; }
+      else {
+        // Overflow: pick table with most space
+        const best = T.reduce((a,b) => (b.seats-(usage[b.id]||0)) > (a.seats-(usage[a.id]||0)) ? b : a);
+        setAssignment(sk, g.key, best.id); usage[best.id] = (usage[best.id]||0) + g.count;
+      }
     });
   });
+}
+
+function renderBookingPlan(groups) {
+  const el = document.getElementById('bookings-content');
+  el.innerHTML = '';
+
+  if (!groups || !groups.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);">No bookings in the next 7 days.</div>`;
+    const btns = document.createElement('div');
+    btns.style.cssText='display:flex;gap:8px;margin-top:12px;';
+    btns.innerHTML=`<button class="reset-btn" style="flex:1;" onclick="fetchAndRenderBookings();">Refresh</button><button class="reset-btn" style="flex:1;" onclick="gcalToken=null;localStorage.removeItem('gcal_token');renderBookings();">Sign out</button>`;
+    el.appendChild(btns);
+    return;
+  }
+
+  // Table seat config
+  const T_DEF = [
+    {id:'main',   label:'Main',   seats:10, c:'main'},
+    {id:'corner', label:'Corner', seats:6,  c:'corner'},
+    {id:'window', label:'Window', seats:6,  c:'window'},
+    {id:'back',   label:'Back',   seats:10, c:'back'},
+  ];
+  const COLORS = {
+    main:   {bg:'#B5D4F4', border:'#378ADD', text:'#0C447C'},
+    corner: {bg:'#C0DD97', border:'#639922', text:'#27500A'},
+    window: {bg:'#FAC775', border:'#BA7517', text:'#633806'},
+    back:   {bg:'#CECBF6', border:'#534AB7', text:'#26215C'},
+  };
+
+  // 30-min slots from 10:30 to 21:00
+  const SLOTS = [];
+  for (let h=10; h<=21; h++) for (let m of [0,30]) {
+    if (h===10&&m===0) continue;
+    if (h===21&&m===30) continue;
+    SLOTS.push(h*60+m);
+  }
+  function fmtT(mins) {
+    const h=Math.floor(mins/60),m=mins%60;
+    return `${h%12||12}${m?':'+String(m).padStart(2,'0'):''}`;
+  }
+  function toMins(iso) {
+    if (!iso) return 0;
+    const d=new Date(iso); return d.getHours()*60+d.getMinutes();
+  }
+
+  // Group by date
+  const byDate = {};
+  groups.forEach(g => {
+    const dk = g.startTime.split('T')[0];
+    if (!byDate[dk]) byDate[dk] = [];
+    byDate[dk].push(g);
+  });
+
+  // Stats
+  const totalCrafters = groups.reduce((s,g)=>s+g.count,0);
+  const statsEl = document.createElement('div');
+  statsEl.style.cssText = 'display:flex;gap:6px;margin-bottom:14px;';
+  statsEl.innerHTML = `
+    <div class="bp-stat"><div class="bp-stat-n">${groups.length}</div><div class="bp-stat-l">Groups</div></div>
+    <div class="bp-stat"><div class="bp-stat-n">${totalCrafters}</div><div class="bp-stat-l">Crafters</div></div>
+    <div class="bp-stat"><div class="bp-stat-n">${Object.keys(byDate).length}</div><div class="bp-stat-l">Days</div></div>`;
+  el.appendChild(statsEl);
+
+  Object.entries(byDate).sort().forEach(([dk, dayGroups]) => {
+    const isToday = dk === new Date().toISOString().split('T')[0];
+
+    // Date header
+    const dHdr = document.createElement('div');
+    dHdr.style.cssText = `font-size:14px;font-weight:500;color:var(--ink);margin-bottom:10px;padding-bottom:6px;border-bottom:1.5px solid ${isToday?'var(--clay)':'var(--ink-faint)'};`;
+    const d = new Date(dk+'T12:00:00');
+    dHdr.textContent = (isToday?'Today — ':'')+d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+    el.appendChild(dHdr);
+
+    // Build booking objects with mins
+    const bkgs = dayGroups.map(g => {
+      const sk = slotKey(g);
+      const tableId = getAssignment(sk, g.key);
+      const splitId = (tableAssignments[sk]||{})[g.key+'__split'] || null;
+      const startM = toMins(g.startTime);
+      const endM = toMins(g.endTime);
+      const tDef = T_DEF.find(t=>t.id===tableId);
+      const sDef = splitId ? T_DEF.find(t=>t.id===splitId) : null;
+      const seatsOnMain = splitId && tDef ? Math.min(g.count, tDef.seats) : g.count;
+      const seatsOnSplit = splitId ? g.count - seatsOnMain : 0;
+      return {g, tableId, splitId, startM, endM, seatsOnMain, seatsOnSplit, sk};
+    });
+
+    // Build the timeline table
+    const tableWrap = document.createElement('div');
+    tableWrap.style.cssText = 'overflow-x:auto;-webkit-overflow-scrolling:touch;border:0.5px solid var(--ink-faint);border-radius:var(--radius);overflow:hidden;margin-bottom:16px;';
+
+    const tbl = document.createElement('table');
+    tbl.style.cssText = 'width:100%;border-collapse:collapse;table-layout:fixed;';
+
+    // Build colgroup
+    const cg = document.createElement('colgroup');
+    cg.innerHTML = `<col style="width:36px;">`;
+    T_DEF.forEach((t,i) => {
+      if (i>0) cg.innerHTML += `<col style="width:2px;">`; // gap
+      for (let s=0;s<t.seats;s++) cg.innerHTML += `<col style="width:16px;">`;
+    });
+    tbl.appendChild(cg);
+
+    // Header row 1: table names
+    const thead = document.createElement('thead');
+    let h1 = '<tr>';
+    h1 += `<th style="width:36px;border-bottom:0.5px solid var(--ink-faint);"></th>`;
+    T_DEF.forEach((t,i) => {
+      const c = COLORS[t.c];
+      if (i>0) h1 += `<th style="background:var(--ink-faint);width:2px;border:none;padding:0;"></th>`;
+      h1 += `<th colspan="${t.seats}" style="padding:5px 3px 4px;text-align:center;font-size:11px;font-weight:500;color:${c.text};background:${c.bg};border-bottom:0.5px solid ${c.border};">${t.label}<span style="display:block;font-size:9px;font-weight:400;opacity:0.7;">${t.seats} seats</span></th>`;
+    });
+    h1 += '</tr>';
+
+    // Header row 2: seat numbers
+    let h2 = '<tr>';
+    h2 += `<th style="border-bottom:1.5px solid var(--ink-faint);"></th>`;
+    T_DEF.forEach((t,i) => {
+      const c = COLORS[t.c];
+      if (i>0) h2 += `<th style="background:var(--ink-faint);padding:0;border-bottom:1.5px solid var(--ink-faint);"></th>`;
+      for (let s=1;s<=t.seats;s++) {
+        h2 += `<th style="font-size:8px;font-weight:400;color:${c.text};text-align:center;padding:2px 0 4px;border-bottom:1.5px solid ${c.border};opacity:0.7;">${s}</th>`;
+      }
+    });
+    h2 += '</tr>';
+    thead.innerHTML = h1+h2;
+    tbl.appendChild(thead);
+
+    // Body: one row per 30-min slot
+    const tbody = document.createElement('tbody');
+    SLOTS.forEach(slotMin => {
+      const isHour = slotMin%60===0;
+      const tr = document.createElement('tr');
+      if (!isHour) tr.style.opacity = '0.55';
+
+      // Time cell
+      const timeTd = document.createElement('td');
+      timeTd.style.cssText = `font-size:${isHour?'10':'9'}px;font-weight:${isHour?'500':'400'};color:var(--ink-mid);text-align:right;padding:0 4px;border-bottom:0.5px solid var(--ink-faint);border-right:0.5px solid var(--ink-faint);vertical-align:middle;white-space:nowrap;height:20px;`;
+      timeTd.textContent = fmtT(slotMin);
+      tr.appendChild(timeTd);
+
+      T_DEF.forEach((t,ti) => {
+        const c = COLORS[t.c];
+        // Gap column
+        if (ti>0) {
+          const gapTd = document.createElement('td');
+          gapTd.style.cssText = 'background:var(--ink-faint);padding:0;width:2px;border-bottom:0.5px solid var(--ink-faint);';
+          tr.appendChild(gapTd);
+        }
+
+        // Find booking(s) on this table at this slot
+        const activeBkgs = bkgs.filter(b => {
+          const onMain = b.tableId===t.id && slotMin>=b.startM && slotMin<b.endM;
+          const onSplit = b.splitId===t.id && slotMin>=b.startM && slotMin<b.endM;
+          return onMain || onSplit;
+        });
+
+        // Build per-seat cells
+        let seatOffset = 0;
+        for (let s=0; s<t.seats; s++) {
+          const td = document.createElement('td');
+          td.style.cssText = `padding:1px 1px;border-bottom:0.5px solid var(--ink-faint);height:20px;vertical-align:top;`;
+
+          // Which booking occupies this seat?
+          let occupiedBy = null;
+          let seatsCounted = 0;
+          for (const bk of activeBkgs) {
+            const seatsHere = bk.tableId===t.id ? bk.seatsOnMain : bk.seatsOnSplit;
+            if (s >= seatsCounted && s < seatsCounted + seatsHere) {
+              occupiedBy = bk;
+              break;
+            }
+            seatsCounted += seatsHere;
+          }
+
+          if (occupiedBy) {
+            const isFirst = slotMin === occupiedBy.startM;
+            const isLast  = slotMin + 30 >= occupiedBy.endM;
+            const shape = isFirst&&isLast?'both':isFirst?'top':isLast?'bot':'mid';
+            const div = document.createElement('div');
+            div.style.cssText = `width:100%;height:18px;background:${c.bg};${
+              shape==='top'||shape==='both'?`border-top:1.5px solid ${c.border};`:''}${
+              shape==='bot'||shape==='both'?`border-bottom:1.5px solid ${c.border};`:''}${
+              shape==='top'?'border-radius:3px 3px 0 0;':''}${
+              shape==='bot'?'border-radius:0 0 3px 3px;':''}${
+              shape==='both'?'border-radius:3px;':''}`;
+
+            // Show name on first seat of first row
+            const seatsBeforeThis = activeBkgs.slice(0, activeBkgs.indexOf(occupiedBy)).reduce((sum, b) => {
+              return sum + (b.tableId===t.id ? b.seatsOnMain : b.seatsOnSplit);
+            }, 0);
+            if (isFirst && s === seatsBeforeThis) {
+              const seatsHere = occupiedBy.tableId===t.id ? occupiedBy.seatsOnMain : occupiedBy.seatsOnSplit;
+              const span = document.createElement('div');
+              span.style.cssText = `font-size:9px;font-weight:500;color:${c.text};padding:1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;`;
+              span.textContent = occupiedBy.g.name;
+              div.appendChild(span);
+              if (occupiedBy.g.isPAP || occupiedBy.g.isCB) {
+                const badge = document.createElement('span');
+                badge.style.cssText = `font-size:7px;font-weight:500;padding:1px 2px;border-radius:2px;margin-left:1px;${occupiedBy.g.isPAP?'background:#993C1D;color:#fff;':'background:#185FA5;color:#fff;'}`;
+                badge.textContent = occupiedBy.g.isPAP?'PAP':'CB';
+                span.appendChild(badge);
+              }
+            }
+            td.appendChild(div);
+          }
+
+          tr.appendChild(td);
+        }
+      });
+
+      tbody.appendChild(tr);
+    });
+
+    tbl.appendChild(tbody);
+    tableWrap.appendChild(tbl);
+    el.appendChild(tableWrap);
+  });
+
+  const btns = document.createElement('div');
+  btns.style.cssText='display:flex;gap:8px;';
+  btns.innerHTML=`<button class="reset-btn" style="flex:1;" onclick="tableAssignments={};fetchAndRenderBookings();">Refresh</button><button class="reset-btn" style="flex:1;" onclick="gcalToken=null;localStorage.removeItem('gcal_token');renderBookings();">Sign out</button>`;
+  el.appendChild(btns);
 }
 
 function gcalSignIn() {
@@ -1421,9 +1722,9 @@ function gcalSignIn() {
   client.requestAccessToken();
 }
 
-async function fetchAndRenderBookings() {
+async function fetchAndRenderBookings(silent = false) {
   const el = document.getElementById('bookings-content');
-  el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);font-size:14px;">Loading bookings…</div>`;
+  if (!silent) el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);font-size:14px;">Loading bookings…</div>`;
 
   const now = new Date();
   const start = new Date(now); start.setHours(0,0,0,0);
@@ -1452,9 +1753,9 @@ async function fetchAndRenderBookings() {
     const groups = parseBookings(data.items || []);
     cachedBookingGroups = groups;
     autoAssign(groups);
-    renderBookingPlan(groups);
+    if (!silent) renderBookingPlan(groups);
   } catch(err) {
-    el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);font-size:14px;">Could not load bookings. Please try again.</div>
+    if (!silent) el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);font-size:14px;">Could not load bookings. Please try again.</div>
       <button class="reset-btn" onclick="renderBookings()">Retry</button>`;
   }
 }
@@ -1627,6 +1928,19 @@ async function init() {
   document.getElementById('loading-screen').classList.add('hidden');
   renderToday();
   renderWeeklySummary();
+  // Load calendar in background so booking summary shows on Today tab
+  if (GCAL_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
+    const stored = localStorage.getItem('gcal_token');
+    if (stored) {
+      gcalToken = stored;
+      fetchAndRenderBookings(true).then(() => {
+        // Re-render Today once bookings are loaded so the row appears
+        if (document.getElementById('today-view').classList.contains('active')) {
+          renderToday();
+        }
+      });
+    }
+  }
 }
 
 init();
