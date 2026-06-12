@@ -104,7 +104,8 @@
   .crafter-btn:active { background: var(--ink-faint); }
   .crafter-count { font-size: 20px; font-weight: 600; color: var(--ink); min-width: 24px; text-align: center; }
 
-  /* BOOKINGS / TABLE PLAN */
+  .bp-tooltip { position:fixed; background:var(--ink); color:#fff; font-size:12px; padding:8px 10px; border-radius:var(--radius-sm); pointer-events:none; z-index:9999; max-width:200px; line-height:1.5; display:none; }
+  .bp-tooltip.visible { display:block; }
   .bp-slot { margin-bottom: 20px; }
   .bp-slot-hdr { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-mid); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
   .bp-slot-hdr::after { content: ''; flex: 1; height: 0.5px; background: var(--ink-faint); }
@@ -204,6 +205,7 @@
 </div>
 
 <div id="sync-indicator">Saving…</div>
+<div class="bp-tooltip" id="bp-tooltip"></div>
 <canvas id="confetti-canvas"></canvas>
 
 <nav class="nav">
@@ -634,18 +636,11 @@ function renderToday() {
     }
   }
 
-  const bookingRowHTML = bookingSummary
-    ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:15px;line-height:1;">🎨</span>
-          <div style="font-size:13px;color:var(--ink);">Bookings</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:5px;">
-          <span style="font-size:12px;color:var(--ink-mid);">${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafters</span>
-          ${bookingSummary.peak >= 15 ? `<span style="font-size:11px;font-weight:500;padding:2px 7px;border-radius:99px;background:#FAECE7;color:#993C1D;">🔥 Busy at ${bookingSummary.peakTime}</span>` : ''}
-        </div>
+  const bookingSentence = bookingSummary
+    ? `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">
+        🎨 ${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafter${bookingSummary.crafters!==1?'s':''} today${bookingSummary.peak>=15?` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at ${bookingSummary.peakTime}</span>`:''}. You're doing brilliantly!
       </div>`
-    : '';
+    : `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">You're doing brilliantly!</div>`;
 
   const catchupLeftoverHTML = isCatchup ? typeRowHTML('↩ Leftover tasks', thuLeftover.length, {bg:'var(--amber-light)',color:'var(--amber)'}, thuLeftover.length) : '';
 
@@ -656,6 +651,7 @@ function renderToday() {
       <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:4px;">${dateStr}</div>
       <div style="font-size:24px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:6px;">${greeting} 👋</div>
       <div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">${message}</div>
+      ${bookingSentence}
     </div>
     <div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;">
       <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
@@ -668,7 +664,6 @@ function renderToday() {
         <div style="height:100%;border-radius:99px;background:${progressColor(totalTasks?Math.round(doneTasks/totalTasks*100):0)};width:${totalTasks?Math.round(doneTasks/totalTasks*100):0}%;transition:width 0.4s;"></div>
       </div>` : ''}
       ${statusRowHTML('🌅', 'Open', ocOpenDone)}
-      ${bookingRowHTML}
       ${isCatchup
         ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
             <div style="display:flex;align-items:center;gap:8px;">
@@ -1567,15 +1562,14 @@ function renderBookingPlan(groups) {
     dHdr.textContent = (isToday?'Today — ':'')+d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
     el.appendChild(dHdr);
 
-    // Build booking objects with mins
+    // Build booking objects with mins — always 2.5hrs (150 mins)
     const bkgs = dayGroups.map(g => {
       const sk = slotKey(g);
       const tableId = getAssignment(sk, g.key);
       const splitId = (tableAssignments[sk]||{})[g.key+'__split'] || null;
       const startM = toMins(g.startTime);
-      const endM = toMins(g.endTime);
+      const endM = startM + 150; // always 2.5 hours
       const tDef = T_DEF.find(t=>t.id===tableId);
-      const sDef = splitId ? T_DEF.find(t=>t.id===splitId) : null;
       const seatsOnMain = splitId && tDef ? Math.min(g.count, tDef.seats) : g.count;
       const seatsOnSplit = splitId ? g.count - seatsOnMain : 0;
       return {g, tableId, splitId, startM, endM, seatsOnMain, seatsOnSplit, sk};
@@ -1583,7 +1577,7 @@ function renderBookingPlan(groups) {
 
     // Build the timeline table
     const tableWrap = document.createElement('div');
-    tableWrap.style.cssText = 'overflow-x:auto;-webkit-overflow-scrolling:touch;border:0.5px solid var(--ink-faint);border-radius:var(--radius);overflow:hidden;margin-bottom:16px;';
+    tableWrap.style.cssText = 'overflow-x:auto;-webkit-overflow-scrolling:touch;border:0.5px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:16px;';
 
     const tbl = document.createElement('table');
     tbl.style.cssText = 'width:100%;border-collapse:collapse;table-layout:fixed;';
@@ -1700,6 +1694,26 @@ function renderBookingPlan(groups) {
               }
               div.style.position = 'relative';
               div.appendChild(span);
+
+              // Tooltip on hover / tap
+              const tipContent = `<strong>${occupiedBy.g.name}</strong><br>${occupiedBy.g.count} crafter${occupiedBy.g.count!==1?'s':''}${occupiedBy.g.isPAP?' · PAP':''}${occupiedBy.g.isCB?' · Class Bento':''}${occupiedBy.g.isClass?' · '+occupiedBy.g.sessionType:''}<br>${fmtT(occupiedBy.startM)} – ${fmtT(occupiedBy.endM)}`;
+              const tip = document.getElementById('bp-tooltip');
+              td.addEventListener('mouseenter', e => {
+                tip.innerHTML = tipContent; tip.classList.add('visible');
+                tip.style.left = Math.min(e.clientX+12, window.innerWidth-220)+'px';
+                tip.style.top = (e.clientY-10)+'px';
+              });
+              td.addEventListener('mousemove', e => {
+                tip.style.left = Math.min(e.clientX+12, window.innerWidth-220)+'px';
+                tip.style.top = (e.clientY-10)+'px';
+              });
+              td.addEventListener('mouseleave', () => tip.classList.remove('visible'));
+              td.addEventListener('touchstart', e => {
+                tip.innerHTML = tipContent; tip.classList.add('visible');
+                tip.style.left = '50%'; tip.style.transform = 'translateX(-50%)';
+                tip.style.top = '80px';
+                setTimeout(()=>tip.classList.remove('visible'), 2500);
+              }, {passive:true});
             }
             td.appendChild(div);
           }
