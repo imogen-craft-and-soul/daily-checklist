@@ -343,6 +343,7 @@ let checked = {};
 let crafters = {Tue:0, Wed:0, Thu:0, Fri:0, Sat:0, Sun:0};
 let notes = {};
 let ocChecked = {};
+let customTasks = {}; // {day: [{id, name, priority, done}]}
 
 let selectedDay = (()=>{
   const d = new Date().getDay();
@@ -365,10 +366,11 @@ async function loadFromSupabase() {
     });
     const rows = await res.json();
     if (rows && rows[0]) {
-      checked   = rows[0].checked   || {};
-      crafters  = rows[0].crafters  || {Tue:0,Wed:0,Thu:0,Fri:0};
-      notes     = rows[0].notes     || {};
-      ocChecked = rows[0].oc_checked || {};
+      checked      = rows[0].checked      || {};
+      crafters     = rows[0].crafters     || {Tue:0,Wed:0,Thu:0,Fri:0};
+      notes        = rows[0].notes        || {};
+      ocChecked    = rows[0].oc_checked   || {};
+      customTasks  = rows[0].custom_tasks || {};
     }
   } catch(e) {
     console.error('Load error:', e);
@@ -388,6 +390,7 @@ async function persistToSupabase() {
       },
       body: JSON.stringify({
         checked, crafters, notes, oc_checked: ocChecked,
+        custom_tasks: customTasks,
         updated_at: new Date().toISOString()
       })
     });
@@ -474,6 +477,25 @@ function setRating(val) {
 }
 
 // ── CRAFTERS ──────────────────────────────────────────────────────────────────
+function addCustomTask(day, name, priority) {
+  if (!name.trim()) return;
+  if (!customTasks[day]) customTasks[day] = [];
+  customTasks[day].push({ id: Date.now().toString(), name: name.trim(), priority, done: false });
+  save();
+  renderToday();
+}
+
+function toggleCustomTask(day, id) {
+  const t = (customTasks[day]||[]).find(t => t.id === id);
+  if (t) { t.done = !t.done; save(); renderToday(); }
+}
+
+function deleteCustomTask(day, id) {
+  customTasks[day] = (customTasks[day]||[]).filter(t => t.id !== id);
+  save();
+  renderToday();
+}
+
 function changeCrafters(delta) {
   crafters[selectedDay] = Math.max(0, (crafters[selectedDay] || 0) + delta);
   save();
@@ -850,9 +872,66 @@ function renderToday() {
         });
       });
     }
-  }
+    // Custom tasks for this day
+    const dayCustom = customTasks[selectedDay] || [];
+    const pLabels2 = {P0:'Must do', P1:'Important', P2:'Last up'};
+    const pColors  = {P0:'var(--clay)', P1:'var(--amber)', P2:'var(--blue)'};
 
-  // Helper: notes section
+    if (dayCustom.length > 0) {
+      ['P0','P1','P2'].forEach(p => {
+        const group = dayCustom.filter(t => t.priority === p);
+        if (!group.length) return;
+        const sec = document.createElement('div');
+        sec.className = 'section-head';
+        sec.textContent = pLabels2[p] + ' (added)';
+        list.appendChild(sec);
+        group.forEach(t => {
+          const card = document.createElement('div');
+          card.className = 'task' + (t.done ? ' done' : '');
+          card.style.cssText = 'position:relative;';
+          const delBtn = document.createElement('button');
+          delBtn.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;color:var(--ink-mid);cursor:pointer;padding:4px;line-height:1;';
+          delBtn.textContent = '×';
+          delBtn.onclick = (e) => { e.stopPropagation(); deleteCustomTask(selectedDay, t.id); };
+          card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div></div>`;
+          card.appendChild(delBtn);
+          card.onclick = () => toggleCustomTask(selectedDay, t.id);
+          list.appendChild(card);
+        });
+      });
+    }
+
+    // Add task UI
+    const addEl = document.createElement('div');
+    addEl.style.cssText = 'margin-top:10px;padding-top:10px;border-top:1px dashed var(--ink-faint);';
+
+    const addLabel = document.createElement('div');
+    addLabel.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:8px;';
+    addLabel.textContent = '+ Add a task';
+
+    const input = document.createElement('input');
+    input.id = 'custom-task-input';
+    input.type = 'text';
+    input.placeholder = 'Task name…';
+    input.style.cssText = 'width:100%;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);outline:none;margin-bottom:7px;box-sizing:border-box;';
+
+    const btnRow = document.createElement('div');
+    btnRow.style.cssText = 'display:flex;gap:6px;';
+
+    const priorities = [{p:'P0',label:'Must do',color:'var(--clay)'},{p:'P1',label:'Important',color:'var(--amber)'},{p:'P2',label:'Last up',color:'var(--blue)'}];
+    priorities.forEach(({p, label, color}) => {
+      const btn = document.createElement('button');
+      btn.style.cssText = `flex:1;padding:7px 4px;font-size:11px;font-weight:500;border:1.5px solid ${color};border-radius:var(--radius-sm);background:#fff;color:${color};cursor:pointer;`;
+      btn.textContent = label;
+      btn.onclick = () => addCustomTask(selectedDay, input.value, p);
+      btnRow.appendChild(btn);
+    });
+
+    addEl.appendChild(addLabel);
+    addEl.appendChild(input);
+    addEl.appendChild(btnRow);
+    wrap.querySelector('#today-task-inner').appendChild(addEl);
+  }
   function buildNotesSection() {
     const n = notes[selectedDay] || {};
     const hasNotes = n.well || n.improve || n.ideas || n.rating;
@@ -1026,107 +1105,125 @@ function renderManager() {
   const el = document.getElementById('mgrCards');
   el.innerHTML = '';
 
-  const dayNames = {Tue:'Tuesday', Wed:'Wednesday', Fri:'Friday', Sat:'Saturday', Sun:'Sunday'};
-  const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas and shopping list'}];
+  const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas & shopping list'}];
+  const todayWd = new Date().getDay(); // 0=Sun,1=Mon...
+  const dayToWd = {Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0};
+  const dayLabels = {Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'};
+
+  // ── 3-col day grid ──────────────────────────────────────────────────────
+  const grid = document.createElement('div');
+  grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:20px;';
 
   ['Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d => {
-    // Catch-up days (Thu, Sat, Sun)
-    if (CATCHUP_DAYS.has(d)) {
-      const leftover = tasksForDay(d);
-      const crafterCount = crafters[d]||0;
-      const rating = (notes[d]||{}).rating||0;
-      const dayNotes = notes[d]||{};
-      const hasNotes = noteFields.some(f=>dayNotes[f.key]);
-      const catchupName = {Thu:'Thursday catch-up', Sat:'Saturday', Sun:'Sunday'}[d];
-      const card = document.createElement('div');
-      card.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;';
-      card.innerHTML = `
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <div style="font-size:15px;font-weight:500;color:var(--ink);">${catchupName}</div>
-          <div style="display:flex;align-items:center;gap:6px;">
-            ${rating?`<span style="color:#F5C842;font-size:14px;letter-spacing:-1px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</span>`:''}
-            <span style="font-size:12px;font-weight:500;color:${leftover.length===0?'var(--green)':'var(--amber)'};">${leftover.length===0?'All clear':''+leftover.length+' left'}</span>
-          </div>
-        </div>
-        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:${hasNotes?'10px':'0'};">
-          <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${leftover.length===0?'var(--green-light)':'var(--amber-light)'};color:${leftover.length===0?'var(--green)':'var(--amber)'};">${leftover.length===0?'✓ Nothing left over':`${leftover.length} task${leftover.length>1?'s':''} not done`}</span>
-          <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:var(--ink-faint);color:var(--ink-mid);">👥 ${crafterCount} crafter${crafterCount!==1?'s':''}</span>
-        </div>
-        ${hasNotes?`<div style="border-top:1px solid var(--ink-faint);padding-top:10px;">${noteFields.filter(f=>dayNotes[f.key]).map(f=>`<div style="margin-bottom:7px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:3px;">${f.label}</div><div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes[f.key]}</div></div>`).join('')}</div>`:''}`;
-      el.appendChild(card);
-      return;
-    }
-    const tasks = TASKS.filter(t => t.day === d);
-    const p0Tasks = tasks.filter(t => t.priority === 'P0');
-    const doneCount = tasks.filter(t => checked[key(d,t.name)]).length;
-    const p0Done = p0Tasks.filter(t => checked[key(d,t.name)]).length;
-    const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
-    const allMusts = p0Done === p0Tasks.length;
-    const ocOpen = isOcComplete(d,'opening');
-    const ocClose = isOcComplete(d,'closing');
+    const wd = dayToWd[d];
+    const isPast = wd < todayWd || (wd === 0 && todayWd > 0);
+    const isToday = wd === todayWd;
+    const hasData = isPast || isToday;
+
+    const isCatchup = CATCHUP_DAYS.has(d);
     const crafterCount = crafters[d] || 0;
     const rating = (notes[d]||{}).rating || 0;
-    const dayNotes = notes[d] || {};
 
-    // Outstanding must-dos
-    const outstanding = p0Tasks.filter(t => !checked[key(d,t.name)]);
-    const isToday = d===selectedDay || (CATCHUP_DAYS.has(selectedDay) && (CATCHUP_SOURCES[selectedDay]||[]).includes(d));
+    let smooth = false, hasIssues = false;
 
-    function statusPill(done, trueLabel, falseLabel) {
-      return `<span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${done?'var(--green-light)':'#FAECE7'};color:${done?'var(--green)':'#993C1D'};">${done?trueLabel:falseLabel}</span>`;
-    }
+    if (!isCatchup && hasData) {
+      const tasks = TASKS.filter(t => t.day === d);
+      const p0Tasks = tasks.filter(t => t.priority === 'P0');
+      const doneCount = tasks.filter(t => checked[key(d,t.name)]).length;
+      const p0Done = p0Tasks.filter(t => checked[key(d,t.name)]).length;
+      const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
+      const allMusts = p0Done === p0Tasks.length;
+      const ocOpen = isOcComplete(d,'opening');
+      const ocClose = isOcComplete(d,'closing');
+      smooth = ocOpen && ocClose && allMusts && pct >= 80;
+      hasIssues = !ocOpen || !ocClose || !allMusts;
 
-    const card = document.createElement('div');
-    card.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;';
+      const outstanding = p0Tasks.filter(t => !checked[key(d,t.name)]);
 
-    // Has any notes
-    const hasNotes = noteFields.some(f => dayNotes[f.key]);
+      let borderColor = hasData ? (smooth ? '#1D9E75' : hasIssues ? '#D85A30' : 'var(--amber)') : 'var(--ink-faint)';
+      let emoji = !hasData ? '—' : smooth ? '✨' : hasIssues ? '⚠️' : '🙂';
+      let dotBg = !hasData ? 'var(--ink-faint)' : smooth ? '#E1F5EE' : hasIssues ? '#FAECE7' : '#FAEEDA';
 
-    card.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
-        <div style="font-size:15px;font-weight:500;color:var(--ink);">${dayNames[d]}</div>
-        <div style="display:flex;align-items:center;gap:6px;">
-          ${rating ? `<span style="color:#F5C842;font-size:14px;letter-spacing:-1px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</span>` : ''}
-          <span style="font-size:13px;font-weight:500;color:${pct===100?'var(--green)':'var(--ink-mid)'};">${pct}%</span>
+      const card = document.createElement('div');
+      card.style.cssText = `background:#fff;border:${hasData?'1.5px':'0.5px'} solid ${borderColor};border-radius:var(--radius);padding:10px 8px;text-align:center;${!hasData?'opacity:0.35;':''}`;
+
+      card.innerHTML = `
+        <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:7px;">${dayLabels[d]}</div>
+        <div style="width:34px;height:34px;border-radius:50%;background:${dotBg};display:flex;align-items:center;justify-content:center;font-size:15px;margin:0 auto 7px;">${emoji}</div>
+        ${rating ? `<div style="color:#F5C842;font-size:11px;letter-spacing:-1px;margin-bottom:5px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>` : `<div style="margin-bottom:5px;height:16px;"></div>`}
+        <div style="display:flex;justify-content:center;gap:3px;flex-wrap:wrap;margin-bottom:5px;">
+          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocOpen?'#E1F5EE':'#FAECE7'};color:${ocOpen?'#0F6E56':'#993C1D'};">${ocOpen?'✓':'✗'} Open</span>
+          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocClose?'#E1F5EE':'#FAECE7'};color:${ocClose?'#0F6E56':'#993C1D'};">${ocClose?'✓':'✗'} Close</span>
         </div>
-      </div>
+        <div style="display:flex;justify-content:center;gap:3px;flex-wrap:wrap;margin-bottom:6px;">
+          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${allMusts?'#E1F5EE':'#FAECE7'};color:${allMusts?'#0F6E56':'#993C1D'};">${allMusts?'✓ Must-dos':'✗ '+outstanding.length+' missed'}</span>
+        </div>
+        <div style="font-size:10px;color:var(--ink-mid);">${pct}% tasks</div>
+        ${crafterCount ? `<div style="font-size:10px;color:var(--ink-mid);">👥 ${crafterCount}</div>` : ''}
+        ${outstanding.length > 0 ? `
+          <div style="margin-top:6px;text-align:left;">
+            ${outstanding.map(t=>`<div style="font-size:9px;color:#993C1D;background:#FAECE7;border-radius:3px;padding:2px 5px;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.name}</div>`).join('')}
+          </div>` : ''}`;
+      grid.appendChild(card);
 
-      <div style="background:var(--ink-faint);border-radius:99px;height:5px;overflow:hidden;margin-bottom:10px;">
-        <div style="height:100%;border-radius:99px;background:${progressColor(pct)};width:${pct}%;transition:width 0.4s;"></div>
-      </div>
+    } else if (isCatchup && hasData) {
+      // Catch-up day card
+      const leftover = tasksForDay(d);
+      smooth = leftover.length === 0;
+      let borderColor = smooth ? '#1D9E75' : 'var(--amber)';
+      let emoji = smooth ? '✨' : '↩';
+      let dotBg = smooth ? '#E1F5EE' : '#FAEEDA';
+      const ocOpen = isOcComplete(d,'opening');
+      const ocClose = isOcComplete(d,'closing');
 
-      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
-        ${statusPill(ocOpen, '✓ Opened', '✗ Not opened')}
-        ${statusPill(ocClose, '✓ Closed', '✗ Not closed')}
-        ${statusPill(allMusts, '✓ Must-dos done', `${p0Tasks.length - p0Done} must-do${p0Tasks.length-p0Done>1?'s':''} missed`)}
-        <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:var(--ink-faint);color:var(--ink-mid);">👥 ${crafterCount} crafter${crafterCount!==1?'s':''}</span>
-      </div>
+      const card = document.createElement('div');
+      card.style.cssText = `background:#fff;border:1.5px solid ${borderColor};border-radius:var(--radius);padding:10px 8px;text-align:center;`;
+      card.innerHTML = `
+        <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:7px;">${dayLabels[d]}</div>
+        <div style="width:34px;height:34px;border-radius:50%;background:${dotBg};display:flex;align-items:center;justify-content:center;font-size:15px;margin:0 auto 7px;">${emoji}</div>
+        ${rating ? `<div style="color:#F5C842;font-size:11px;letter-spacing:-1px;margin-bottom:5px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>` : `<div style="margin-bottom:5px;height:16px;"></div>`}
+        <div style="display:flex;justify-content:center;gap:3px;flex-wrap:wrap;margin-bottom:5px;">
+          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocOpen?'#E1F5EE':'#FAECE7'};color:${ocOpen?'#0F6E56':'#993C1D'};">${ocOpen?'✓':'✗'} Open</span>
+          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocClose?'#E1F5EE':'#FAECE7'};color:${ocClose?'#0F6E56':'#993C1D'};">${ocClose?'✓':'✗'} Close</span>
+        </div>
+        <div style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${smooth?'#E1F5EE':'var(--amber-light)'};color:${smooth?'#0F6E56':'var(--amber)'};margin-bottom:6px;display:inline-block;">${smooth?'✓ All clear':leftover.length+' left over'}</div>
+        ${crafterCount ? `<div style="font-size:10px;color:var(--ink-mid);">👥 ${crafterCount}</div>` : ''}`;
+      grid.appendChild(card);
 
-      ${outstanding.length > 0 ? `
-        <div style="margin-bottom:10px;">
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#993C1D;margin-bottom:5px;cursor:pointer;display:flex;justify-content:space-between;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';">
-            Missed must-dos <span style="opacity:0.6;">${outstanding.length} ▾</span>
-          </div>
-          <div style="display:${isToday?'block':'none'}">
-            ${outstanding.map(t=>`<div style="font-size:12px;color:#993C1D;background:#FAECE7;border-radius:var(--radius-sm);padding:4px 8px;margin-bottom:3px;">${t.name}</div>`).join('')}
-          </div>
-        </div>` : ''}
-
-      ${hasNotes ? `
-        <div style="border-top:1px solid var(--ink-faint);padding-top:10px;">
-          ${noteFields.filter(f=>dayNotes[f.key]).map(f=>`
-            <div style="margin-bottom:7px;">
-              <div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:3px;">${f.label}</div>
-              <div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes[f.key]}</div>
-            </div>`).join('')}
-        </div>` : ''}`;
-
-    el.appendChild(card);
+    } else {
+      // Future day
+      const card = document.createElement('div');
+      card.style.cssText = 'background:#fff;border:0.5px solid var(--ink-faint);border-radius:var(--radius);padding:10px 8px;text-align:center;opacity:0.35;';
+      card.innerHTML = `
+        <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:7px;">${dayLabels[d]}</div>
+        <div style="width:34px;height:34px;border-radius:50%;background:var(--ink-faint);margin:0 auto 12px;"></div>
+        <div style="font-size:10px;color:var(--ink-mid);">Not yet</div>`;
+      grid.appendChild(card);
+    }
   });
+  el.appendChild(grid);
 
-  // Notes summary and AI button
+  // ── Notes by category ───────────────────────────────────────────────────
   const notesEl = document.getElementById('mgrNotesSummary');
-  notesEl.innerHTML = '';
+  let notesHTML = '';
+  noteFields.forEach(({key: fkey, label}) => {
+    const entries = ['Tue','Wed','Thu','Fri','Sat','Sun']
+      .map(d => ({d, text:(notes[d]||{})[fkey]}))
+      .filter(e => e.text);
+    if (!entries.length) return;
+    notesHTML += `<div style="margin-bottom:14px;">
+      <div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:6px;">${label}</div>
+      ${entries.map(e=>`<div style="display:flex;gap:8px;margin-bottom:5px;">
+        <div style="font-size:10px;font-weight:500;color:var(--ink-mid);min-width:22px;padding-top:2px;">${e.d}</div>
+        <div style="font-size:12px;color:var(--ink);line-height:1.5;">${e.text}</div>
+      </div>`).join('')}
+    </div>`;
+  });
+  if (notesHTML) {
+    notesEl.innerHTML = `<div style="height:0.5px;background:var(--ink-faint);margin-bottom:14px;"></div>${notesHTML}`;
+  } else {
+    notesEl.innerHTML = '';
+  }
 
   document.getElementById('mgrAiSummary').innerHTML =
     `<button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Summarise the week with AI</button>`;
@@ -1198,7 +1295,7 @@ function resetOc(type) {
 // ── RESET ALL ─────────────────────────────────────────────────────────────────
 function resetAll() {
   if (!confirm('Reset all tasks, crafter counts and notes for the week? This cannot be undone.')) return;
-  checked={}; crafters={Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0,Tue_water:0,Wed_water:0,Thu_water:0,Fri_water:0,Sat_water:0,Sun_water:0}; notes={}; ocChecked={};
+  checked={}; crafters={Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0,Tue_water:0,Wed_water:0,Thu_water:0,Fri_water:0,Sat_water:0,Sun_water:0}; notes={}; ocChecked={}; customTasks={};
   save(); renderStaff(); renderManager();
 }
 
