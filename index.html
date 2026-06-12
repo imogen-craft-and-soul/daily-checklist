@@ -1434,59 +1434,63 @@ function setAssignment(slotK, groupKey, tableId) {
 }
 
 function autoAssign(groups) {
-  // Table config: id, maxSeats, canShare (Back cannot share)
   const T = [
     {id:'main',   seats:10, shareable:true},
     {id:'corner', seats:6,  shareable:true},
     {id:'window', seats:6,  shareable:true},
     {id:'back',   seats:10, shareable:false},
   ];
-  // Allowed split pairs for groups >12 (adjacent only, no back)
   const SPLIT_PAIRS = [['main','corner'],['corner','window']];
 
   const slots = {};
   groups.forEach(g => { const sk=slotKey(g); if(!slots[sk]) slots[sk]=[]; slots[sk].push(g); });
 
   Object.entries(slots).forEach(([sk, slotGroups]) => {
-    // Track seat usage per table this slot: {tableId: seatsUsed}
     const usage = {};
     T.forEach(t => { usage[t.id] = 0; });
-    // Carry over existing assignments
+
+    // Carry over existing manual assignments
     Object.entries(tableAssignments[sk]||{}).forEach(([gk, tid]) => {
-      const g = slotGroups.find(g => g.key.replace(/["|]/g,'_') === gk || g.key === gk);
+      if (gk.endsWith('__split')) return;
+      const g = slotGroups.find(g => g.key === gk || g.key.replace(/["|]/g,'_') === gk);
       if (g) usage[tid] = (usage[tid]||0) + g.count;
     });
 
-    slotGroups.forEach(g => {
-      if (getAssignment(sk, g.key)) return; // already assigned
+    // Sort groups largest first so big groups get first pick
+    const unassigned = slotGroups.filter(g => !getAssignment(sk, g.key))
+      .sort((a,b) => b.count - a.count);
 
+    unassigned.forEach(g => {
+      // Large group: try split pair
       if (g.count > 12) {
-        // Try split pair
         const pair = SPLIT_PAIRS.find(([a,b]) => {
-          const ta = T.find(t=>t.id===a), tb = T.find(t=>t.id===b);
-          return (usage[a]||0) + g.count <= ta.seats + tb.seats &&
-                 (usage[a]||0) === 0 && (usage[b]||0) === 0;
+          const ta=T.find(t=>t.id===a), tb=T.find(t=>t.id===b);
+          return usage[a]===0 && usage[b]===0 && g.count <= ta.seats+tb.seats;
         });
         if (pair) {
-          setAssignment(sk, g.key, pair[0]); // primary table
-          // Record split onto second table in a separate key
-          if (!tableAssignments[sk]) tableAssignments[sk] = {};
-          tableAssignments[sk][g.key + '__split'] = pair[1];
-          const ta = T.find(t=>t.id===pair[0]), tb = T.find(t=>t.id===pair[1]);
-          const seatsOnA = Math.min(g.count, ta.seats - (usage[pair[0]]||0));
-          usage[pair[0]] = (usage[pair[0]]||0) + seatsOnA;
-          usage[pair[1]] = (usage[pair[1]]||0) + (g.count - seatsOnA);
+          setAssignment(sk, g.key, pair[0]);
+          if (!tableAssignments[sk]) tableAssignments[sk]={};
+          tableAssignments[sk][g.key+'__split'] = pair[1];
+          const ta=T.find(t=>t.id===pair[0]);
+          const seatsOnA = Math.min(g.count, ta.seats);
+          usage[pair[0]] += seatsOnA;
+          usage[pair[1]] += g.count - seatsOnA;
           return;
         }
       }
 
-      // Normal assignment: find table with enough free seats
-      const free = T.find(t => (t.seats - (usage[t.id]||0)) >= g.count);
-      if (free) { setAssignment(sk, g.key, free.id); usage[free.id] = (usage[free.id]||0) + g.count; }
-      else {
-        // Overflow: pick table with most space
-        const best = T.reduce((a,b) => (b.seats-(usage[b.id]||0)) > (a.seats-(usage[a.id]||0)) ? b : a);
-        setAssignment(sk, g.key, best.id); usage[best.id] = (usage[best.id]||0) + g.count;
+      // Find the emptiest table that fits (prefer completely empty tables)
+      const fits = T.filter(t => t.seats - usage[t.id] >= g.count);
+      if (fits.length) {
+        // Among tables that fit, pick the one with least usage (most empty)
+        const best = fits.reduce((a,b) => usage[a.id] <= usage[b.id] ? a : b);
+        setAssignment(sk, g.key, best.id);
+        usage[best.id] += g.count;
+      } else {
+        // Overflow: pick table with most remaining space
+        const best = T.reduce((a,b) => (b.seats-usage[b.id]) > (a.seats-usage[a.id]) ? b : a);
+        setAssignment(sk, g.key, best.id);
+        usage[best.id] += g.count;
       }
     });
   });
@@ -1677,22 +1681,25 @@ function renderBookingPlan(groups) {
               shape==='bot'?'border-radius:0 0 3px 3px;':''}${
               shape==='both'?'border-radius:3px;':''}`;
 
-            // Show name on first seat of first row
+            // Show name spanning all seats of this booking on first row
             const seatsBeforeThis = activeBkgs.slice(0, activeBkgs.indexOf(occupiedBy)).reduce((sum, b) => {
               return sum + (b.tableId===t.id ? b.seatsOnMain : b.seatsOnSplit);
             }, 0);
             if (isFirst && s === seatsBeforeThis) {
               const seatsHere = occupiedBy.tableId===t.id ? occupiedBy.seatsOnMain : occupiedBy.seatsOnSplit;
               const span = document.createElement('div');
-              span.style.cssText = `font-size:9px;font-weight:500;color:${c.text};padding:1px 3px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;`;
+              // Span across all seats: each seat col is ~16px + 1px border
+              const spanWidth = seatsHere * 17 - 2;
+              span.style.cssText = `position:absolute;top:2px;left:2px;width:${spanWidth}px;font-size:9px;font-weight:500;color:${c.text};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;line-height:1.2;z-index:2;pointer-events:none;`;
               span.textContent = occupiedBy.g.name;
-              div.appendChild(span);
               if (occupiedBy.g.isPAP || occupiedBy.g.isCB) {
                 const badge = document.createElement('span');
-                badge.style.cssText = `font-size:7px;font-weight:500;padding:1px 2px;border-radius:2px;margin-left:1px;${occupiedBy.g.isPAP?'background:#993C1D;color:#fff;':'background:#185FA5;color:#fff;'}`;
+                badge.style.cssText = `font-size:7px;font-weight:500;padding:1px 2px;border-radius:2px;margin-left:2px;${occupiedBy.g.isPAP?'background:#993C1D;color:#fff;':'background:#185FA5;color:#fff;'}`;
                 badge.textContent = occupiedBy.g.isPAP?'PAP':'CB';
                 span.appendChild(badge);
               }
+              div.style.position = 'relative';
+              div.appendChild(span);
             }
             td.appendChild(div);
           }
