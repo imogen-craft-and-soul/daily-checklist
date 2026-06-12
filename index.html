@@ -518,13 +518,36 @@ function renderToday() {
   tabsEl.style.cssText = 'display:flex;gap:5px;margin-bottom:14px;';
   DAYS.forEach(d => {
     const btn = document.createElement('button');
-    const catchupTasks = CATCHUP_DAYS.has(d) ? tasksForDay(d).length : 0;
-    const regularTasks = !CATCHUP_DAYS.has(d) ? TASKS.filter(t=>t.day===d).length : 0;
-    const doneTasks2 = !CATCHUP_DAYS.has(d) ? TASKS.filter(t=>t.day===d&&checked[key(d,t.name)]).length : 0;
-    const allDone = !CATCHUP_DAYS.has(d) && doneTasks2===regularTasks && regularTasks>0;
+    const isCatchupTab = CATCHUP_DAYS.has(d);
+    const leftover = isCatchupTab ? tasksForDay(d).length : 0;
+    const regularTasks = !isCatchupTab ? TASKS.filter(t=>t.day===d).length : 0;
+    const doneTasks2 = !isCatchupTab ? TASKS.filter(t=>t.day===d&&checked[key(d,t.name)]).length : 0;
+    const allDone = !isCatchupTab && doneTasks2===regularTasks && regularTasks>0;
+
+    // Booking count for this day
+    const dDate = new Date(); // approximate — find the date for tab day d
+    let tabBookings = 0;
+    if (cachedBookingGroups) {
+      // Find next occurrence of this weekday in cached data
+      cachedBookingGroups.forEach(g => {
+        const gDay = new Date(g.startTime).toLocaleDateString('en-GB',{weekday:'short'}).slice(0,3);
+        const dayMap = {Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'};
+        if (gDay === d) tabBookings += g.count;
+      });
+    }
+
+    let subText;
+    if (isCatchupTab) {
+      subText = leftover === 0 ? '✓ clear' : leftover + ' left';
+    } else if (allDone) {
+      subText = '✓ done';
+    } else {
+      subText = doneTasks2 + '/' + regularTasks;
+    }
+    if (tabBookings > 0) subText += ' · ' + tabBookings + '👥';
+
     btn.style.cssText = `flex:1;padding:7px 2px;font-size:12px;font-weight:500;border:1.5px solid ${d===selectedDay?'var(--ink)':'var(--ink-faint)'};border-radius:var(--radius-sm);background:${d===selectedDay?'var(--ink)':'var(--white)'};color:${d===selectedDay?'#fff':'var(--ink-mid)'};cursor:pointer;text-align:center;`;
-    const countStr = CATCHUP_DAYS.has(d) ? (catchupTasks>0?catchupTasks+'↩':'✓') : (allDone?'✓':doneTasks2+'/'+regularTasks);
-    btn.innerHTML = `${d}<span style="display:block;font-size:9px;font-weight:400;margin-top:1px;opacity:0.8;">${countStr}</span>`;
+    btn.innerHTML = `${d}<span style="display:block;font-size:9px;font-weight:400;margin-top:1px;opacity:0.8;">${subText}</span>`;
     btn.onclick = () => { selectedDay=d; renderToday(); renderWeeklySummary(); };
     tabsEl.appendChild(btn);
   });
@@ -543,10 +566,10 @@ function renderToday() {
     'A tidy shop is a happy shop. Let\'s go!',
   ];
   const afternoonMessages = [
-    'You\'re doing brilliantly — keep it up!',
     'Afternoon energy — let\'s power through.',
     'The shop is in great hands this afternoon.',
     'Almost there — finish the day strong!',
+    'Great work so far today!',
   ];
   const messages = hour < 12 ? morningMessages : afternoonMessages;
   const message = messages[now.getDate() % messages.length];
@@ -615,32 +638,36 @@ function renderToday() {
     .map(([type, count]) => typeRowHTML(type, count))
     .join('');
 
-  // Booking summary from cached calendar data
-  const todayDateKey = new Date().toISOString().split('T')[0];
+  // Booking summary — use the actual date for the selected day
+  const selectedDateKey = (() => {
+    if (!cachedBookingGroups || !cachedBookingGroups.length) return null;
+    // Find the date in cached data that matches selectedDay's weekday
+    const dayMap = {Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0};
+    const targetWd = dayMap[selectedDay];
+    const match = cachedBookingGroups.find(g => new Date(g.startTime).getDay() === targetWd);
+    return match ? match.startTime.split('T')[0] : null;
+  })();
+
   let bookingSummary = null;
-  if (cachedBookingGroups && cachedBookingGroups.length) {
-    const todayGroups = cachedBookingGroups.filter(g => g.startTime.startsWith(todayDateKey));
-    if (todayGroups.length) {
-      const totalBookingCrafters = todayGroups.reduce((s,g) => s+g.count, 0);
-      // Find peak concurrent slot — group by overlapping time windows
+  if (selectedDateKey && cachedBookingGroups) {
+    const dayGroups = cachedBookingGroups.filter(g => g.startTime.startsWith(selectedDateKey));
+    if (dayGroups.length) {
+      const totalBookingCrafters = dayGroups.reduce((s,g) => s+g.count, 0);
       const slots = {};
-      todayGroups.forEach(g => {
-        const sk = slotKey(g);
-        if (!slots[sk]) slots[sk] = 0;
-        slots[sk] += g.count;
-      });
+      dayGroups.forEach(g => { const sk=slotKey(g); slots[sk]=(slots[sk]||0)+g.count; });
       const peakCount = Math.max(...Object.values(slots));
       const peakTime = Object.entries(slots).find(([,v])=>v===peakCount);
       const peakLabel = peakTime ? formatTime(peakTime[0].split('|')[0]) : null;
-      bookingSummary = {total: todayGroups.length, crafters: totalBookingCrafters, peak: peakCount, peakTime: peakLabel};
+      bookingSummary = {total:dayGroups.length, crafters:totalBookingCrafters, peak:peakCount, peakTime:peakLabel};
     }
   }
 
   const bookingSentence = bookingSummary
-    ? `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">
-        🎨 ${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafter${bookingSummary.crafters!==1?'s':''} today${bookingSummary.peak>=15?` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at ${bookingSummary.peakTime}</span>`:''}. You're doing brilliantly!
-      </div>`
-    : `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">You're doing brilliantly!</div>`;
+    ? `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">🎨 ${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafter${bookingSummary.crafters!==1?'s':''} today${bookingSummary.peak>=15?` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at ${bookingSummary.peakTime}</span>`:''} — you're doing brilliantly!</div>`
+    : '';
+
+  const thuLeftover = isCatchup ? tasksForDay(selectedDay) : [];
+  const catchupSources = (CATCHUP_SOURCES[selectedDay]||[]).join(' & ');
 
   const catchupLeftoverHTML = isCatchup ? typeRowHTML('↩ Leftover tasks', thuLeftover.length, {bg:'var(--amber-light)',color:'var(--amber)'}, thuLeftover.length) : '';
 
