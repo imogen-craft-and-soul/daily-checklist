@@ -307,6 +307,7 @@ async function loadFromSupabase() {
 }
 
 async function persistToSupabase() {
+  if (window._realtimeLastSave) window._realtimeLastSave();
   showSync('saving');
   try {
     await fetch(`${SUPABASE_URL}/rest/v1/weekly_data`, {
@@ -344,7 +345,72 @@ function showSync(state) {
   if (state === 'saved') setTimeout(() => { el.className = ''; }, 2000);
 }
 
-// ── HELPERS ───────────────────────────────────────────────────────────────────
+// ── REALTIME SYNC ─────────────────────────────────────────────────────────────
+function startRealtimeSync() {
+  // Use Supabase Realtime via WebSocket
+  const wsUrl = SUPABASE_URL.replace('https://', 'wss://') + '/realtime/v1/websocket?apikey=' + SUPABASE_KEY + '&vsn=1.0.0';
+  let ws;
+  let reconnectTimer;
+  let heartbeatTimer;
+  let lastSaveTime = 0;
+
+  function connect() {
+    ws = new WebSocket(wsUrl);
+
+    ws.onopen = () => {
+      // Join the channel for weekly_data table
+      ws.send(JSON.stringify({
+        topic: 'realtime:public:weekly_data',
+        event: 'phx_join',
+        payload: { config: { broadcast: { self: false }, presence: { key: '' }, postgres_changes: [{ event: 'UPDATE', schema: 'public', table: 'weekly_data', filter: `id=eq.${ROW_ID}` }] } },
+        ref: '1'
+      }));
+      // Heartbeat every 30s to keep connection alive
+      heartbeatTimer = setInterval(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send(JSON.stringify({ topic: 'phoenix', event: 'heartbeat', payload: {}, ref: null }));
+        }
+      }, 30000);
+    };
+
+    ws.onmessage = (e) => {
+      try {
+        const msg = JSON.parse(e.data);
+        if (msg.event === 'postgres_changes' && msg.payload?.data?.record) {
+          const record = msg.payload.data.record;
+          // Ignore if we just saved (within 3 seconds) — that's our own change
+          if (Date.now() - lastSaveTime < 3000) return;
+          // Update state from remote
+          checked     = record.checked      || {};
+          crafters    = record.crafters     || {Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0};
+          notes       = record.notes        || {};
+          ocChecked   = record.oc_checked   || {};
+          customTasks = record.custom_tasks || {};
+          // Re-render current view
+          const activeView = document.querySelector('.view.active')?.id;
+          if (activeView === 'today-view') renderToday();
+          if (activeView === 'manager-view') renderManager();
+          showSync('saved');
+        }
+      } catch(e) {}
+    };
+
+    ws.onclose = () => {
+      clearInterval(heartbeatTimer);
+      // Reconnect after 5s
+      reconnectTimer = setTimeout(connect, 5000);
+    };
+
+    ws.onerror = () => ws.close();
+  }
+
+  connect();
+
+  // Track when we last saved so we don't re-render our own changes
+  const origPersist = persistToSupabase;
+  window._realtimeLastSave = () => { lastSaveTime = Date.now(); };
+}
+
 function key(day, name) { return day+'::'+name; }
 function ocKey(day, type, task) { return day+'::'+type+'::'+task; }
 
@@ -1908,6 +1974,7 @@ async function init() {
   clearTimeout(loadingTimeout);
   document.getElementById('loading-screen').classList.add('hidden');
   renderToday();
+  startRealtimeSync();
   // Load calendar in background so booking summary shows on Today tab
   if (GCAL_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID') {
     const stored = localStorage.getItem('gcal_token');
