@@ -685,7 +685,7 @@ function renderToday() {
   }
 
   const bookingSentence = bookingSummary
-    ? `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">🎨 ${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafter${bookingSummary.crafters!==1?'s':''} today${bookingSummary.peak>=15?` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at ${bookingSummary.peakTime}</span>`:''} — you're doing brilliantly!</div>`
+    ? `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">🎨 ${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafter${bookingSummary.crafters!==1?'s':''} today${bookingSummary.peak>=15?` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at ${bookingSummary.peakTime}</span>`:''}</div>`
     : '';
 
   const thuLeftover = isCatchup ? tasksForDay(selectedDay) : [];
@@ -1512,6 +1512,7 @@ let gcalToken = null;
 let tableAssignments = {};
 let cachedBookingGroups = null;
 let selectedBookingDate = new Date().toISOString().split('T')[0];
+let bookingChecked = {}; // {groupKey: bool}
 let dragState = null;
 
 function parseBookings(events) {
@@ -1672,7 +1673,7 @@ function renderBookingPlan(groups) {
 
   // Build tab strip
   const tabsEl = document.createElement('div');
-  tabsEl.style.cssText = 'display:flex;gap:5px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;';
+  tabsEl.style.cssText = 'display:flex;gap:5px;margin-bottom:14px;';
   availableDates.forEach(dk => {
     const d = new Date(dk + 'T12:00:00');
     const isToday = dk === todayKey;
@@ -1681,7 +1682,7 @@ function renderBookingPlan(groups) {
     const dateLabel = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
     const dayCount = (groups||[]).filter(g=>g.startTime.startsWith(dk)).reduce((s,g)=>s+g.count,0);
     const btn = document.createElement('button');
-    btn.style.cssText = `flex-shrink:0;padding:7px 10px;font-size:12px;font-weight:500;border:1.5px solid ${isSelected?'var(--ink)':'var(--ink-faint)'};border-radius:var(--radius-sm);background:${isSelected?'var(--ink)':'var(--white)'};color:${isSelected?'#fff':'var(--ink-mid)'};cursor:pointer;text-align:center;min-width:56px;`;
+    btn.style.cssText = `flex:1;padding:7px 2px;font-size:12px;font-weight:500;border:1.5px solid ${isSelected?'var(--ink)':'var(--ink-faint)'};border-radius:var(--radius-sm);background:${isSelected?'var(--ink)':'var(--white)'};color:${isSelected?'#fff':'var(--ink-mid)'};cursor:pointer;text-align:center;`;
     btn.innerHTML = `${dayLabel}<span style="display:block;font-size:9px;font-weight:400;margin-top:1px;opacity:0.8;">${dayCount?dayCount+'👥':dateLabel}</span>`;
     btn.onclick = () => { selectedBookingDate = dk; renderBookingPlan(cachedBookingGroups); };
     tabsEl.appendChild(btn);
@@ -1714,56 +1715,85 @@ function renderBookingPlan(groups) {
   // ── GROUP LIST ────────────────────────────────────────────────────────────
   const totalCrafters = selectedGroups.reduce((s,g)=>s+g.count,0);
 
-  const summaryEl = document.createElement('div');
-  summaryEl.style.cssText = 'display:flex;gap:6px;margin-bottom:12px;';
-  summaryEl.innerHTML = `
-    <div class="bp-stat"><div class="bp-stat-n">${selectedGroups.length}</div><div class="bp-stat-l">Groups</div></div>
-    <div class="bp-stat"><div class="bp-stat-n">${totalCrafters}</div><div class="bp-stat-l">Crafters</div></div>`;
-  el.appendChild(summaryEl);
 
   // Sort groups chronologically
+  // ── Busy times banner ────────────────────────────────────────────────────
+  const slotCounts = {};
+  selectedGroups.forEach(g => {
+    const sk = slotKey(g);
+    slotCounts[sk] = (slotCounts[sk]||0) + g.count;
+  });
+  const busySlots = Object.entries(slotCounts)
+    .filter(([,v]) => v >= 15)
+    .sort((a,b) => a[0].localeCompare(b[0]));
+
+  if (busySlots.length) {
+    const banner = document.createElement('div');
+    banner.style.cssText = 'background:#FAECE7;border-radius:var(--radius-sm);padding:8px 12px;margin-bottom:12px;font-size:12px;color:#712B13;';
+    banner.innerHTML = `<span style="font-weight:500;">🔥 Busy today:</span> ` +
+      busySlots.map(([sk,count]) => {
+        const startIso = sk.split('|')[0];
+        return `${fmtT(toMins(startIso))} (${count} crafters)`;
+      }).join(', ');
+    el.appendChild(banner);
+  }
+
+  // ── GROUP LIST ────────────────────────────────────────────────────────────
   const sortedGroups = [...selectedGroups].sort((a,b) => a.startTime.localeCompare(b.startTime));
 
   const listEl = document.createElement('div');
-  listEl.style.cssText = 'margin-bottom:20px;';
-  sortedGroups.forEach(g => {
+  listEl.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:16px;overflow:hidden;';
+  sortedGroups.forEach((g, i) => {
     const startM = toMins(g.startTime);
     const endM = startM + 150;
     const sk = slotKey(g);
     const tableId = getAssignment(sk, g.key);
     const tDef = T_DEF.find(t=>t.id===tableId);
     const tColor = tDef ? COLORS[tDef.c] : null;
+    const isDone = !!bookingChecked[g.key];
 
     const row = document.createElement('div');
-    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:8px 0;border-bottom:0.5px solid var(--ink-faint);';
+    row.style.cssText = `display:flex;align-items:center;gap:10px;padding:10px 12px;border-bottom:${i<sortedGroups.length-1?'0.5px solid var(--ink-faint)':'none'};cursor:pointer;background:${isDone?'var(--ink-faint)':'#fff'};transition:background 0.15s;`;
+
+    // Tick checkbox
+    const tick = document.createElement('div');
+    tick.style.cssText = `width:20px;height:20px;border-radius:50%;border:1.5px solid ${isDone?'var(--green)':'var(--ink-faint)'};background:${isDone?'var(--green)':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s;`;
+    tick.innerHTML = isDone ? `<svg viewBox="0 0 12 12" fill="none" width="10" height="10"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>` : '';
 
     // Time
     const timeEl = document.createElement('div');
-    timeEl.style.cssText = 'font-size:12px;font-weight:500;color:var(--ink-mid);min-width:72px;white-space:nowrap;';
+    timeEl.style.cssText = `font-size:11px;font-weight:500;color:${isDone?'var(--ink-mid)':'var(--ink-mid)'};min-width:68px;white-space:nowrap;${isDone?'text-decoration:line-through;opacity:0.5;':''}`;
     timeEl.textContent = `${fmtT(startM)} – ${fmtT(endM)}`;
 
-    // Colour dot for table
+    // Colour dot
     const dot = document.createElement('div');
-    dot.style.cssText = `width:8px;height:8px;border-radius:50%;flex-shrink:0;background:${tColor?tColor.border:'var(--ink-faint)'};`;
+    dot.style.cssText = `width:7px;height:7px;border-radius:50%;flex-shrink:0;background:${tColor?tColor.border:'var(--ink-faint)'};${isDone?'opacity:0.4;':''}`;
 
     // Name + details
     const info = document.createElement('div');
     info.style.cssText = 'flex:1;min-width:0;';
     const name = document.createElement('div');
-    name.style.cssText = 'font-size:13px;font-weight:500;color:var(--ink);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;';
+    name.style.cssText = `font-size:13px;font-weight:500;color:${isDone?'var(--ink-mid)':'var(--ink)'};white-space:nowrap;overflow:hidden;text-overflow:ellipsis;${isDone?'text-decoration:line-through;':''}`;
     name.textContent = g.name;
     const meta = document.createElement('div');
-    meta.style.cssText = 'display:flex;gap:4px;align-items:center;margin-top:2px;';
-    meta.innerHTML = `<span style="font-size:11px;color:var(--ink-mid);">👥 ${g.count} ${g.count===1?'person':'people'}</span>
+    meta.style.cssText = `display:flex;gap:4px;align-items:center;margin-top:2px;${isDone?'opacity:0.5;':''}`;
+    meta.innerHTML = `<span style="font-size:11px;color:var(--ink-mid);">👥 ${g.count}</span>
       ${g.isPAP?'<span style="font-size:10px;font-weight:500;color:#712B13;background:#F5C4B3;padding:1px 4px;border-radius:3px;">PAP</span>':''}
       ${g.isCB?'<span style="font-size:10px;font-weight:500;color:#0C447C;background:#B5D4F4;padding:1px 4px;border-radius:3px;">CB</span>':''}
       ${tDef?`<span style="font-size:10px;color:${tColor.text};background:${tColor.bg};padding:1px 4px;border-radius:3px;">${tDef.label}</span>`:''}`;
     info.appendChild(name);
     info.appendChild(meta);
 
+    row.appendChild(tick);
     row.appendChild(timeEl);
     row.appendChild(dot);
     row.appendChild(info);
+
+    row.onclick = () => {
+      bookingChecked[g.key] = !bookingChecked[g.key];
+      renderBookingPlan(cachedBookingGroups);
+    };
+
     listEl.appendChild(row);
   });
   el.appendChild(listEl);
