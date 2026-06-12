@@ -6,24 +6,28 @@
 <title>Shop tasks</title>
 <style>
   :root {
-    --clay: #C4714A;
-    --clay-light: #F5EBE4;
-    --clay-dark: #8B4D2F;
-    --ink: #1E1A17;
-    --ink-mid: #6B5F57;
-    --ink-faint: #E8E0DA;
-    --white: #FDFAF8;
-    --green: #2A7A52;
-    --green-light: #E4F2EB;
-    --amber: #B8710A;
-    --amber-light: #FDF0DC;
-    --blue-light: #E8F0FB;
-    --blue: #2A5BA8;
-    --radius: 10px;
-    --radius-sm: 6px;
+    --clay: #C4714A; --clay-light: #F5EBE4; --clay-dark: #8B4D2F;
+    --ink: #1E1A17; --ink-mid: #6B5F57; --ink-faint: #E8E0DA;
+    --white: #FDFAF8; --green: #2A7A52; --green-light: #E4F2EB;
+    --amber: #B8710A; --amber-light: #FDF0DC;
+    --blue-light: #E8F0FB; --blue: #2A5BA8;
+    --radius: 10px; --radius-sm: 6px;
   }
   * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
   body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; background: var(--white); color: var(--ink); min-height: 100vh; }
+
+  /* LOADING SCREEN */
+  #loading-screen { position: fixed; inset: 0; background: var(--white); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 1000; gap: 14px; }
+  #loading-screen.hidden { display: none; }
+  .loading-spinner { width: 32px; height: 32px; border: 3px solid var(--ink-faint); border-top-color: var(--clay); border-radius: 50%; animation: spin 0.8s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-text { font-size: 14px; color: var(--ink-mid); }
+
+  /* SYNC INDICATOR */
+  #sync-indicator { position: fixed; bottom: 14px; right: 14px; font-size: 11px; font-weight: 500; padding: 4px 10px; border-radius: 99px; z-index: 200; opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+  #sync-indicator.saving { background: var(--amber-light); color: var(--amber); opacity: 1; }
+  #sync-indicator.saved { background: var(--green-light); color: var(--green); opacity: 1; }
+  #sync-indicator.error { background: #FAECE7; color: #993C1D; opacity: 1; }
 
   /* NAV */
   .nav { display: flex; background: var(--ink); position: sticky; top: 0; z-index: 100; }
@@ -42,7 +46,7 @@
 
   /* PROGRESS */
   .progress-wrap { background: var(--ink-faint); border-radius: 99px; height: 5px; margin-bottom: 6px; overflow: hidden; }
-  .progress-fill { height: 100%; border-radius: 99px; background: var(--clay); transition: width 0.4s ease; }
+  .progress-fill { height: 100%; border-radius: 99px; background: var(--clay); transition: width 0.4s ease, background 0.4s ease; }
   .progress-label { font-size: 12px; color: var(--ink-mid); margin-bottom: 16px; }
 
   /* SECTION */
@@ -61,9 +65,6 @@
   .task-name { font-size: 14px; line-height: 1.35; color: var(--ink); }
   .task-meta { display: flex; gap: 5px; flex-wrap: wrap; margin-top: 5px; }
   .badge { font-size: 11px; padding: 2px 7px; border-radius: 99px; font-weight: 500; }
-  .badge-p0 { background: var(--clay-light); color: var(--clay-dark); }
-  .badge-p1 { background: var(--amber-light); color: var(--amber); }
-  .badge-p2 { background: var(--blue-light); color: var(--blue); }
   .badge-time { background: var(--ink-faint); color: var(--ink-mid); }
   .badge-type-clean { background: #E8F0FB; color: #2A5BA8; }
   .badge-type-organise { background: #E4F2EB; color: #2A7A52; }
@@ -79,42 +80,170 @@
   .day-card-name { font-size: 15px; font-weight: 600; color: var(--ink); }
   .day-card-pct { font-size: 13px; font-weight: 500; color: var(--ink-mid); }
   .day-card-bar-wrap { background: var(--ink-faint); border-radius: 99px; height: 6px; margin-bottom: 6px; overflow: hidden; }
-  .day-card-bar { height: 100%; border-radius: 99px; background: var(--clay); transition: width 0.4s; }
+  .day-card-bar { height: 100%; border-radius: 99px; background: var(--clay); transition: width 0.4s, background 0.4s; }
   .day-card-detail { font-size: 12px; color: var(--ink-mid); }
   .day-card.all-done .day-card-bar { background: var(--green); }
   .day-card.all-done .day-card-name { color: var(--green); }
+  .outstanding-section { margin-top: 8px; border-top: 1px solid var(--ink-faint); padding-top: 8px; }
+  .outstanding-label { font-size: 11px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; color: var(--clay-dark); margin-bottom: 6px; }
+  .outstanding-task { font-size: 12px; color: var(--clay-dark); background: var(--clay-light); border-radius: var(--radius-sm); padding: 4px 8px; margin-bottom: 4px; }
+  .crafter-summary { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 6px; }
+  .crafter-pill { font-size: 12px; background: var(--ink-faint); color: var(--ink-mid); border-radius: 99px; padding: 2px 8px; }
 
   .reset-btn { width: 100%; margin-top: 20px; padding: 13px; font-size: 14px; font-weight: 500; color: var(--ink-mid); background: none; border: 1.5px solid var(--ink-faint); border-radius: var(--radius); cursor: pointer; }
   .reset-btn:active { background: var(--ink-faint); }
-
-  .empty-state { text-align: center; padding: 40px 20px; color: var(--ink-mid); font-size: 14px; }
   .all-done-banner { background: var(--green-light); color: var(--green); border-radius: var(--radius); padding: 12px 16px; text-align: center; font-size: 14px; font-weight: 500; margin-bottom: 16px; display: none; }
   .all-done-banner.show { display: block; }
+
+  /* CRAFTER COUNTER */
+  .crafter-bar { display: flex; align-items: center; justify-content: space-between; background: #fff; border: 1px solid var(--ink-faint); border-radius: var(--radius); padding: 10px 14px; margin-bottom: 14px; }
+  .crafter-label { font-size: 13px; color: var(--ink-mid); }
+  .crafter-controls { display: flex; align-items: center; gap: 12px; }
+  .crafter-btn { width: 32px; height: 32px; border-radius: 50%; border: 1.5px solid var(--ink-faint); background: var(--white); color: var(--ink); font-size: 18px; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+  .crafter-btn:active { background: var(--ink-faint); }
+  .crafter-count { font-size: 20px; font-weight: 600; color: var(--ink); min-width: 24px; text-align: center; }
+
+  /* OPEN / CLOSE PANELS */
+  .oc-panel { background: #fff; border: 1px solid var(--ink-faint); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
+  .oc-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; user-select: none; }
+  .oc-header-left { display: flex; align-items: center; gap: 10px; }
+  .oc-dot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+  .oc-dot.open { background: var(--green); }
+  .oc-dot.close { background: var(--clay); }
+  .oc-title { font-size: 15px; font-weight: 600; color: var(--ink); }
+  .oc-chevron { font-size: 12px; color: var(--ink-mid); transition: transform 0.2s; }
+  .oc-panel.expanded .oc-chevron { transform: rotate(180deg); }
+  .oc-body { display: none; padding: 0 16px 14px; border-top: 1px solid var(--ink-faint); }
+  .oc-panel.expanded .oc-body { display: block; }
+  .oc-progress-wrap { background: var(--ink-faint); border-radius: 99px; height: 5px; margin: 8px 0 4px; overflow: hidden; }
+  .oc-progress-fill { height: 100%; border-radius: 99px; }
+  .oc-progress-fill.open { background: var(--green); }
+  .oc-progress-fill.close { background: var(--clay); }
+  .oc-progress-label { font-size: 12px; color: var(--ink-mid); margin-bottom: 10px; }
+
+  /* NOTES SECTION */
+  .notes-section { margin-top: 28px; padding-top: 20px; border-top: 1px solid var(--ink-faint); }
+  .notes-heading { font-size: 15px; font-weight: 600; color: var(--ink); margin-bottom: 14px; }
+  .note-block { margin-bottom: 14px; }
+  .note-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-mid); margin-bottom: 6px; }
+  .note-input { width: 100%; min-height: 72px; padding: 10px 12px; font-size: 14px; font-family: inherit; color: var(--ink); background: #fff; border: 1px solid var(--ink-faint); border-radius: var(--radius); resize: none; outline: none; line-height: 1.5; }
+  .note-input:focus { border-color: var(--clay); }
+  .note-input::placeholder { color: #b0a8a2; }
+
+  /* STAR RATING */
+  .star-row { display: flex; align-items: center; gap: 8px; margin-bottom: 16px; }
+  .star-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-mid); }
+  .stars { display: flex; gap: 4px; }
+  .star { font-size: 26px; cursor: pointer; color: var(--ink-faint); transition: color 0.15s, transform 0.1s; line-height: 1; }
+  .star.active { color: #F5C842; }
+  .star:active { transform: scale(1.2); }
+
+  /* NOTES SUMMARY */
+  .notes-summary-card { background: #fff; border: 1px solid var(--ink-faint); border-radius: var(--radius); padding: 14px 16px; margin-bottom: 12px; }
+  .notes-summary-title { font-size: 13px; font-weight: 600; color: var(--ink); margin-bottom: 10px; }
+  .notes-summary-section { margin-bottom: 12px; }
+  .notes-summary-section:last-child { margin-bottom: 0; }
+  .notes-summary-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-mid); margin-bottom: 6px; }
+  .notes-summary-entry { font-size: 12px; color: var(--ink); padding: 6px 10px; background: var(--white); border: 1px solid var(--ink-faint); border-radius: var(--radius-sm); margin-bottom: 5px; }
+  .notes-summary-entry-day { font-size: 10px; font-weight: 600; color: var(--ink-mid); margin-bottom: 2px; text-transform: uppercase; letter-spacing: 0.05em; }
+
+  /* AI SUMMARY */
+  .ai-summary-btn { width: 100%; padding: 13px; font-size: 14px; font-weight: 500; color: #fff; background: var(--ink); border: none; border-radius: var(--radius); cursor: pointer; margin-bottom: 12px; display: flex; align-items: center; justify-content: center; gap: 8px; }
+  .ai-summary-btn:disabled { opacity: 0.5; cursor: default; }
+  .ai-result { background: #fff; border: 1px solid var(--ink-faint); border-radius: var(--radius); padding: 14px 16px; font-size: 13px; line-height: 1.6; color: var(--ink); white-space: pre-wrap; margin-bottom: 12px; }
+  .ai-result-label { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-mid); margin-bottom: 8px; }
+
+  /* CONFETTI */
+  #confetti-canvas { position: fixed; top: 0; left: 0; width: 100%; height: 100%; pointer-events: none; z-index: 999; }
+
+  /* OC WEEK PIPS */
+  .oc-pip { width: 100%; height: 28px; border-radius: 6px; display: flex; align-items: center; justify-content: center; font-size: 12px; }
+  .oc-pip.done { background: var(--green-light); }
+  .oc-pip.not-done { background: var(--ink-faint); }
 </style>
 </head>
 <body>
 
+<div id="loading-screen">
+  <div class="loading-spinner"></div>
+  <div class="loading-text">Loading shop tasks…</div>
+</div>
+
+<div id="sync-indicator">Saving…</div>
+<canvas id="confetti-canvas"></canvas>
+
 <nav class="nav">
   <button class="nav-btn active" onclick="switchView('staff')">Daily checklist</button>
+  <button class="nav-btn" onclick="switchView('openclose')">Open / Close</button>
   <button class="nav-btn" onclick="switchView('manager')">Summary</button>
 </nav>
 
 <div id="staff-view" class="view active">
   <div class="day-tabs" id="dayTabs"></div>
-  <div class="all-done-banner" id="allDoneBanner">All tasks complete for today!</div>
+  <div class="crafter-bar">
+    <div class="crafter-label">Crafters today</div>
+    <div class="crafter-controls">
+      <button class="crafter-btn" onclick="changeCrafters(-1)">−</button>
+      <div class="crafter-count" id="crafterCount">0</div>
+      <button class="crafter-btn" onclick="changeCrafters(1)">+</button>
+    </div>
+  </div>
+  <div class="all-done-banner" id="allDoneBanner">All tasks complete for today! 🎉</div>
   <div class="progress-wrap"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
   <div class="progress-label" id="progressLabel"></div>
   <div id="taskList"></div>
+  <div class="notes-section">
+    <div class="notes-heading">Notes</div>
+    <div class="star-row">
+      <div class="star-label">Rate the day</div>
+      <div class="stars" id="starRating">
+        <span class="star" onclick="setRating(1)">★</span>
+        <span class="star" onclick="setRating(2)">★</span>
+        <span class="star" onclick="setRating(3)">★</span>
+        <span class="star" onclick="setRating(4)">★</span>
+        <span class="star" onclick="setRating(5)">★</span>
+      </div>
+    </div>
+    <div class="note-block">
+      <div class="note-label">What went well</div>
+      <textarea class="note-input" id="note-well" placeholder="Add notes here…" oninput="saveNote('well')"></textarea>
+    </div>
+    <div class="note-block">
+      <div class="note-label">What could be improved</div>
+      <textarea class="note-input" id="note-improve" placeholder="Add notes here…" oninput="saveNote('improve')"></textarea>
+    </div>
+    <div class="note-block">
+      <div class="note-label">Ideas and shopping list</div>
+      <textarea class="note-input" id="note-ideas" placeholder="Add notes here…" oninput="saveNote('ideas')"></textarea>
+    </div>
+  </div>
+</div>
+
+<div id="openclose-view" class="view">
+  <div id="oc-day-header" style="margin-bottom:14px;">
+    <div id="oc-day-label" style="font-size:18px;font-weight:600;color:var(--ink);margin-bottom:6px;"></div>
+    <div id="oc-day-status" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+  </div>
+  <div id="oc-list"></div>
 </div>
 
 <div id="manager-view" class="view">
-  <div class="mgr-header">Manager summary</div>
+  <div class="mgr-header">Summary</div>
   <div class="mgr-sub" id="mgrDate"></div>
+  <div id="mgrOcWeek"></div>
   <div id="mgrCards"></div>
+  <div id="mgrNotesSummary"></div>
+  <div id="mgrAiSummary"></div>
   <button class="reset-btn" onclick="resetAll()">Reset all tasks</button>
 </div>
 
 <script>
+// ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
+const SUPABASE_URL = 'https://vpavavdyqwbmzthwcdpr.supabase.co';
+const SUPABASE_KEY = 'sb_publishable_wZtssMFiojyFk8oBj2Wmhw_S_1XYw7O';
+const ROW_ID = 'current-week';
+
+// ── TASK DATA ─────────────────────────────────────────────────────────────────
 const TASKS = [
   // TUESDAY
   {name:'Pottery delivery - pick up pottery from kiln', day:'Tue', priority:'P0', time:'', type:'Pottery delivery', freq:'Weekly', sortOrder:0},
@@ -127,10 +256,19 @@ const TASKS = [
   {name:'Bathroom - mop floor', day:'Tue', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
   {name:'Bathroom - clean sink', day:'Tue', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
   {name:'Bathroom - clean mirror', day:'Tue', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
+  {name:'Garage - refill the pottery cupboards', day:'Tue', priority:'P0', time:'20 mins', type:'Organise', freq:'2x weekly'},
+  {name:'Storeroom - organize and stamp 80 notebooks', day:'Tue', priority:'P0', time:'15 mins', type:'Organise', freq:'Weekly'},
+  {name:'Front room - water plants', day:'Tue', priority:'P1', time:'10 mins', type:'Garden', freq:'Weekly'},
+  {name:'Stock count - Pottery', day:'Tue', priority:'P1', time:'15 mins', type:'Stock count', freq:'Monthly'},
+  {name:'Stock count - Air dry clay', day:'Tue', priority:'P1', time:'5 mins', type:'Stock count', freq:'Monthly'},
+  {name:'Stock count - Beads', day:'Tue', priority:'P1', time:'5 mins', type:'Stock count', freq:'Monthly'},
+  {name:'Stock count - Anything else', day:'Tue', priority:'P1', time:'', type:'Stock count', freq:'Monthly'},
 
   // WEDNESDAY
+  {name:'Pottery ready - find and email', day:'Wed', priority:'P0', time:'3 hours', type:'Pottery delivery', freq:'2x weekly', sortOrder:0},
+  {name:'Pottery postage - check emails, package and label', day:'Wed', priority:'P0', time:'30 mins', type:'Pottery delivery', freq:'Weekly', sortOrder:0},
   {name:'Front shelf - clean top', day:'Wed', priority:'P0', time:'25 mins', type:'Clean', freq:'Weekly', sortOrder:1},
-  {name:'Front shelf - clean acrylic lids', day:'Wed', priority:'P0', time:'20 mins', type:'Clean', freq:'Weekly', sortOrder:1},
+  {name:'Front shelf - clean acrylic lids - inside and outside', day:'Wed', priority:'P0', time:'20 mins', type:'Clean', freq:'Weekly', sortOrder:1},
   {name:'Front shelf - refill acrylic bottles', day:'Wed', priority:'P0', time:'20 mins', type:'Organise', freq:'Weekly', sortOrder:1},
   {name:'Front shelf - dust inside shelves', day:'Wed', priority:'P0', time:'20 mins', type:'Clean', freq:'Monthly', sortOrder:1},
   {name:'Canvas shelves - clean and dust', day:'Wed', priority:'P1', time:'15 mins', type:'Clean', freq:'Monthly'},
@@ -143,37 +281,56 @@ const TASKS = [
   {name:'Storeroom - refill pottery paint', day:'Wed', priority:'P0', time:'45 mins', type:'Organise', freq:'Weekly'},
   {name:'Desk area - sweep floor', day:'Wed', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
   {name:'Desk area - clean desktop', day:'Wed', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
-  {name:'Pottery postage - check emails, package and label', day:'Wed', priority:'P0', time:'30 mins', type:'Pottery delivery', freq:'Weekly', sortOrder:0},
-  {name:'Pottery ready - find and email', day:'Wed', priority:'P0', time:'3 hours', type:'Pottery delivery', freq:'2x weekly', sortOrder:0},
 
   // FRIDAY
+  {name:'Pottery ready - find and email', day:'Fri', priority:'P0', time:'3 hours', type:'Pottery delivery', freq:'2x weekly', sortOrder:0},
   {name:'Front room - sweep floor', day:'Fri', priority:'P0', time:'30 mins', type:'Clean', freq:'2x weekly'},
   {name:'Window shelves - wipe and dust', day:'Fri', priority:'P1', time:'30 mins', type:'Clean', freq:'Monthly'},
   {name:'Book shelves - clean and dust', day:'Fri', priority:'P1', time:'30 mins', type:'Clean', freq:'Monthly'},
   {name:'Clean mirror', day:'Fri', priority:'P1', time:'10 mins', type:'Clean', freq:'Monthly'},
-  {name:'Front room - water plants', day:'Tue', priority:'P1', time:'10 mins', type:'Garden', freq:'Weekly'},
   {name:'Storeroom - clean sink', day:'Fri', priority:'P1', time:'10 mins', type:'Clean', freq:'Weekly'},
   {name:'Storeroom - organize info cards', day:'Fri', priority:'P2', time:'15 mins', type:'Organise', freq:'Weekly'},
   {name:'Storeroom - organise bubble wrap', day:'Fri', priority:'P2', time:'20 mins', type:'Organise', freq:'Weekly'},
   {name:'Storeroom - prep embroidery hoops', day:'Fri', priority:'P1', time:'30 mins', type:'Organise', freq:'Weekly'},
-  {name:'Garage - refill the pottery cupboards', day:'Fri', priority:'P0', time:'20 mins', type:'Organise', freq:'Weekly'},
-  {name:'Storeroom - organize and stamp 80 notebooks', day:'Fri', priority:'P0', time:'15 mins', type:'Organise', freq:'Weekly'},
+  {name:'Garage - refill the pottery cupboards', day:'Fri', priority:'P0', time:'20 mins', type:'Organise', freq:'2x weekly'},
   {name:'Bathroom - clean toilet', day:'Fri', priority:'P0', time:'10 mins', type:'Clean', freq:'2x weekly'},
   {name:'Bathroom - mop floor', day:'Fri', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
   {name:'Bathroom - clean sink', day:'Fri', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
   {name:'Bathroom - clean mirror', day:'Fri', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Pottery ready - find and email', day:'Fri', priority:'P0', time:'3 hours', type:'Pottery delivery', freq:'2x weekly', sortOrder:0},
-  {name:'Stock count - Pottery', day:'Tue', priority:'P1', time:'15 mins', type:'Stock count', freq:'Monthly'},
-  {name:'Stock count - Air dry clay', day:'Tue', priority:'P1', time:'5 mins', type:'Stock count', freq:'Monthly'},
-  {name:'Stock count - Beads', day:'Tue', priority:'P1', time:'5 mins', type:'Stock count', freq:'Monthly'},
-  {name:'Stock count - Anything else', day:'Tue', priority:'P1', time:'', type:'Stock count', freq:'Monthly'},
 ];
 
-const DAYS = ['Tue','Wed','Thu','Fri'];
-const DAY_LABELS = {Tue:'Tuesday', Wed:'Wednesday', Thu:'Thursday (catch-up)', Fri:'Friday'};
+const OC_TASKS = {
+  opening: [
+    'Unlock and open the front door',
+    'Turn on lights and music',
+    'Check and respond to overnight emails and bookings',
+    'Sync bookings with Class Bento',
+    'Set up craft tables — check supplies are stocked',
+    'Check the bathroom is clean and stocked',
+    'Check front shelf display is tidy',
+    'Water plants if needed',
+    'Note any low stock or issues',
+  ],
+  closing: [
+    'Reply to any outstanding booking requests',
+    'Charge craft table lamps',
+    'Tidy and reset craft tables for tomorrow',
+    'Clean tea and coffee station',
+    'Sweep or hoover front room floor',
+    'Empty bins if needed',
+    'Check bathroom is clean',
+    'Turn off lights and music',
+    'Lock up and set alarm',
+  ]
+};
 
-// State: checked tasks stored by "day::taskname"
-let checked = JSON.parse(localStorage.getItem('shopChecked') || '{}');
+const DAYS = ['Tue','Wed','Thu','Fri'];
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let checked = {};
+let crafters = {Tue:0, Wed:0, Thu:0, Fri:0};
+let notes = {};
+let ocChecked = {};
 
 let selectedDay = (()=>{
   const d = new Date().getDay();
@@ -184,49 +341,150 @@ let selectedDay = (()=>{
   return 'Wed';
 })();
 
-function save() { localStorage.setItem('shopChecked', JSON.stringify(checked)); }
-function key(day, name) { return day+'::'+name; }
+// ── SUPABASE SYNC ─────────────────────────────────────────────────────────────
+let saveTimer = null;
 
-function switchView(v) {
-  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById(v+'-view').classList.add('active');
-  event.currentTarget.classList.add('active');
-  if (v==='manager') renderManager();
+async function loadFromSupabase() {
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/weekly_data?id=eq.${ROW_ID}&select=*`, {
+      headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
+    });
+    const rows = await res.json();
+    if (rows && rows[0]) {
+      checked   = rows[0].checked   || {};
+      crafters  = rows[0].crafters  || {Tue:0,Wed:0,Thu:0,Fri:0};
+      notes     = rows[0].notes     || {};
+      ocChecked = rows[0].oc_checked || {};
+    }
+  } catch(e) {
+    console.error('Load error:', e);
+  }
+}
+
+async function persistToSupabase() {
+  showSync('saving');
+  try {
+    await fetch(`${SUPABASE_URL}/rest/v1/weekly_data?id=eq.${ROW_ID}`, {
+      method: 'PATCH',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        checked, crafters, notes, oc_checked: ocChecked,
+        updated_at: new Date().toISOString()
+      })
+    });
+    showSync('saved');
+  } catch(e) {
+    showSync('error');
+  }
+}
+
+// Debounce saves — waits 800ms after last change before hitting Supabase
+function save() {
+  clearTimeout(saveTimer);
+  saveTimer = setTimeout(persistToSupabase, 800);
+}
+
+function showSync(state) {
+  const el = document.getElementById('sync-indicator');
+  el.className = state;
+  el.textContent = state === 'saving' ? 'Saving…' : state === 'saved' ? '✓ Saved' : '⚠ Sync error';
+  if (state === 'saved') setTimeout(() => { el.className = ''; }, 2000);
+}
+
+// ── HELPERS ───────────────────────────────────────────────────────────────────
+function key(day, name) { return day+'::'+name; }
+function ocKey(day, type, task) { return day+'::'+type+'::'+task; }
+
+function progressColor(pct) {
+  if (pct <= 50) { const g = Math.round(113 + (pct/50)*(190-113)); return `rgb(196,${g},74)`; }
+  if (pct < 100) {
+    const r = Math.round(196 + ((pct-50)/50)*(42-196));
+    const g = Math.round(190 + ((pct-50)/50)*(122-190));
+    const b = Math.round(74  + ((pct-50)/50)*(82-74));
+    return `rgb(${r},${g},${b})`;
+  }
+  return '#2A7A52';
+}
+
+function typeBadgeClass(type) {
+  if (type==='Pottery delivery') return 'pottery';
+  if (type==='Stock count') return 'stock';
+  return type.toLowerCase();
+}
+
+function isOcComplete(day, type) {
+  return OC_TASKS[type].every(t => ocChecked[ocKey(day, type, t)]);
 }
 
 function tasksForDay(day) {
   if (day !== 'Thu') return TASKS.filter(t => t.day === day);
-  // Thursday: leftover (unticked) tasks from Tuesday and Wednesday
   const leftover = [];
   ['Tue','Wed'].forEach(src => {
     TASKS.filter(t => t.day === src).forEach(t => {
-      if (!checked[key(src, t.name)]) {
-        leftover.push({...t, originalDay: src});
-      }
+      if (!checked[key(src, t.name)]) leftover.push({...t, originalDay: src});
     });
   });
   return leftover;
 }
 
-function typeBadgeClass(type) {
-  if (type === 'Pottery delivery') return 'pottery';
-  if (type === 'Stock count') return 'stock';
-  return type.toLowerCase();
+// ── NOTES & RATINGS ───────────────────────────────────────────────────────────
+function saveNote(field) {
+  if (!notes[selectedDay]) notes[selectedDay] = {};
+  notes[selectedDay][field] = document.getElementById('note-'+field).value;
+  save();
 }
 
+function loadNotes(day) {
+  const n = notes[day] || {};
+  document.getElementById('note-well').value = n.well || '';
+  document.getElementById('note-improve').value = n.improve || '';
+  document.getElementById('note-ideas').value = n.ideas || '';
+  renderStars(n.rating || 0);
+}
+
+function renderStars(rating) {
+  document.querySelectorAll('#starRating .star').forEach((s,i) => s.classList.toggle('active', i < rating));
+}
+
+function setRating(val) {
+  if (!notes[selectedDay]) notes[selectedDay] = {};
+  notes[selectedDay].rating = notes[selectedDay].rating === val ? 0 : val;
+  renderStars(notes[selectedDay].rating);
+  save();
+}
+
+// ── CRAFTERS ──────────────────────────────────────────────────────────────────
+function changeCrafters(delta) {
+  crafters[selectedDay] = Math.max(0, (crafters[selectedDay] || 0) + delta);
+  document.getElementById('crafterCount').textContent = crafters[selectedDay];
+  save();
+}
+
+// ── NAVIGATION ────────────────────────────────────────────────────────────────
+function switchView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(v+'-view').classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (v==='manager') { renderManager(); }
+  if (v==='openclose') { renderOpenClose(); }
+}
+
+// ── RENDER: STAFF VIEW ────────────────────────────────────────────────────────
 function renderTabs() {
   const el = document.getElementById('dayTabs');
   el.innerHTML = '';
   DAYS.forEach(d => {
     const tasks = tasksForDay(d);
-    const done = d === 'Thu'
-      ? 0
-      : tasks.filter(t => checked[key(d,t.name)]).length;
-    const total = tasks.length;
+    const done = d==='Thu' ? 0 : tasks.filter(t => checked[key(d,t.name)]).length;
     const btn = document.createElement('button');
     btn.className = 'day-tab' + (d===selectedDay?' active':'');
-    const countText = d === 'Thu' ? (total > 0 ? total+' left' : 'clear') : done+'/'+total;
+    const countText = d==='Thu' ? (tasks.length>0 ? tasks.length+' left' : 'clear') : done+'/'+tasks.length;
     btn.innerHTML = `${d}<span class="tab-count">${countText}</span>`;
     btn.onclick = () => { selectedDay=d; renderStaff(); };
     el.appendChild(btn);
@@ -238,47 +496,46 @@ function renderStaff() {
   const tasks = tasksForDay(selectedDay);
   const isThursday = selectedDay === 'Thu';
 
+  document.getElementById('crafterCount').textContent = crafters[selectedDay] || 0;
+  loadNotes(selectedDay);
+
   let doneCount, pct;
   if (isThursday) {
-    doneCount = 0;
-    pct = tasks.length === 0 ? 100 : 0;
+    doneCount = 0; pct = tasks.length===0 ? 100 : 0;
   } else {
     doneCount = tasks.filter(t => checked[key(selectedDay,t.name)]).length;
     pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 100;
   }
 
-  document.getElementById('progressFill').style.width = pct+'%';
+  const bar = document.getElementById('progressFill');
+  const prevPct = parseInt(bar.style.width) || 0;
+  bar.style.width = pct+'%';
+  bar.style.background = progressColor(pct);
+  if (pct===100 && prevPct<100) launchConfetti();
   document.getElementById('progressLabel').textContent = isThursday
-    ? (tasks.length === 0 ? 'No leftover tasks — all clear!' : tasks.length+' task'+(tasks.length>1?'s':'')+' carried over from Tue/Wed')
+    ? (tasks.length===0 ? 'No leftover tasks — all clear!' : tasks.length+' task'+(tasks.length>1?'s':'')+' carried over from Tue/Wed')
     : doneCount+' of '+tasks.length+' tasks done';
+  document.getElementById('allDoneBanner').classList.toggle('show', !isThursday && doneCount===tasks.length && tasks.length>0);
 
-  const banner = document.getElementById('allDoneBanner');
-  banner.classList.toggle('show', !isThursday && doneCount===tasks.length && tasks.length>0);
-
-  const groups = {P0:[], P1:[], P2:[]};
+  const groups = {P0:[],P1:[],P2:[]};
   tasks.forEach(t => groups[t.priority].push(t));
   const typeOrder = {'Pottery delivery':0,'Clean':1,'Organise':2,'Stock count':3,'Garden':4};
   const sortGroup = arr => arr.sort((a,b) => {
-    const so = (a.sortOrder??99) - (b.sortOrder??99);
-    if (so !== 0) return so;
-    return (typeOrder[a.type]??99) - (typeOrder[b.type]??99);
+    const so = (a.sortOrder??99)-(b.sortOrder??99);
+    return so!==0 ? so : (typeOrder[a.type]??99)-(typeOrder[b.type]??99);
   });
-  sortGroup(groups['P0']);
-  sortGroup(groups['P1']);
-  sortGroup(groups['P2']);
+  ['P0','P1','P2'].forEach(p => sortGroup(groups[p]));
 
   const list = document.getElementById('taskList');
   list.innerHTML = '';
-
-  if (isThursday && tasks.length === 0) {
-    const empty = document.createElement('div');
-    empty.style.cssText = 'text-align:center;padding:40px 20px;color:var(--ink-mid);font-size:14px;';
-    empty.textContent = 'Nothing left over — great work!';
-    list.appendChild(empty);
-    return;
+  if (isThursday && tasks.length===0) {
+    const e = document.createElement('div');
+    e.style.cssText = 'text-align:center;padding:40px 20px;color:var(--ink-mid);font-size:14px;';
+    e.textContent = 'Nothing left over — great work!';
+    list.appendChild(e); return;
   }
 
-  const pLabels = {P0:'Must do', P1:'Important', P2:'Last up'};
+  const pLabels = {P0:'Must do',P1:'Important',P2:'Last up'};
   ['P0','P1','P2'].forEach(p => {
     if (!groups[p].length) return;
     const sec = document.createElement('div');
@@ -286,7 +543,6 @@ function renderStaff() {
     sec.textContent = pLabels[p];
     list.appendChild(sec);
     groups[p].forEach(t => {
-      // For Thursday, ticking marks the task done on its original day
       const srcDay = isThursday ? t.originalDay : selectedDay;
       const k = key(srcDay, t.name);
       const done = !!checked[k];
@@ -294,15 +550,11 @@ function renderStaff() {
       card.className = 'task'+(done?' done':'');
       const fromBadge = isThursday ? `<span class="badge" style="background:var(--ink-faint);color:var(--ink-mid)">From ${t.originalDay}</span>` : '';
       card.innerHTML = `
-        <div class="check">
-          <svg class="check-icon" viewBox="0 0 12 12" fill="none">
-            <polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-          </svg>
-        </div>
+        <div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
         <div class="task-body">
           <div class="task-name">${t.name}</div>
           <div class="task-meta">
-            ${t.time ? `<span class="badge badge-time">${t.time}</span>` : ''}
+            ${t.time?`<span class="badge badge-time">${t.time}</span>`:''}
             <span class="badge badge-type-${typeBadgeClass(t.type)}">${t.type}</span>
             ${fromBadge}
           </div>
@@ -313,53 +565,238 @@ function renderStaff() {
   });
 }
 
+// ── RENDER: MANAGER VIEW ──────────────────────────────────────────────────────
 function renderManager() {
-  const now = new Date();
-  document.getElementById('mgrDate').textContent = now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+  document.getElementById('mgrDate').textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
   const el = document.getElementById('mgrCards');
   el.innerHTML = '';
-  const dayNames = {Tue:'Tuesday', Wed:'Wednesday', Fri:'Friday'};
+  const dayNames = {Tue:'Tuesday',Wed:'Wednesday',Fri:'Friday'};
+
   ['Tue','Wed','Thu','Fri'].forEach(d => {
-    if (d === 'Thu') {
-      const thuLeftover = tasksForDay('Thu');
-      const thuCard = document.createElement('div');
-      thuCard.className = 'day-card' + (thuLeftover.length === 0 ? ' all-done' : '');
-      thuCard.innerHTML = `
-        <div class="day-card-head">
-          <div class="day-card-name">Thursday catch-up</div>
-          <div class="day-card-pct">${thuLeftover.length === 0 ? '✓' : thuLeftover.length+' left'}</div>
-        </div>
-        <div class="day-card-bar-wrap"><div class="day-card-bar" style="width:${thuLeftover.length===0?100:0}%"></div></div>
-        <div class="day-card-detail">${thuLeftover.length === 0 ? 'All tasks complete from Tue & Wed' : thuLeftover.length+' task'+(thuLeftover.length>1?'s':'')+' not yet done from Tue/Wed'}</div>`;
-      el.appendChild(thuCard);
-      return;
+    if (d==='Thu') {
+      const leftover = tasksForDay('Thu');
+      const card = document.createElement('div');
+      card.className = 'day-card'+(leftover.length===0?' all-done':'');
+      const crafterCount = crafters['Thu']||0;
+      card.innerHTML = `
+        <div class="day-card-head"><div class="day-card-name">Thursday catch-up</div><div class="day-card-pct">${leftover.length===0?'✓':leftover.length+' left'}</div></div>
+        <div class="day-card-bar-wrap"><div class="day-card-bar" style="width:${leftover.length===0?100:0}%"></div></div>
+        <div class="day-card-detail">${leftover.length===0?'All tasks complete from Tue & Wed':leftover.length+' task'+(leftover.length>1?'s':'')+' not yet done from Tue/Wed'}</div>
+        <div class="crafter-summary"><span class="crafter-pill">${crafterCount} crafter${crafterCount!==1?'s':''}</span></div>`;
+      el.appendChild(card); return;
     }
-    const tasks = TASKS.filter(t => t.day === d);
+
+    const tasks = TASKS.filter(t => t.day===d);
     const doneCount = tasks.filter(t => checked[key(d,t.name)]).length;
     const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
     const allDone = doneCount===tasks.length && tasks.length>0;
+    const crafterCount = crafters[d]||0;
+    const ocOpenDone = isOcComplete(d,'opening');
+    const ocCloseDone = isOcComplete(d,'closing');
+    const outstanding = tasks.filter(t => t.priority==='P0' && !checked[key(d,t.name)]);
+    const isToday = d===selectedDay || (selectedDay==='Thu' && (d==='Tue'||d==='Wed'));
+    const outstandingHTML = outstanding.length>0
+      ? `<div class="outstanding-section">
+          <div class="outstanding-label" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';">
+            Outstanding must-do <span style="font-size:10px;opacity:0.6;">${outstanding.length} task${outstanding.length>1?'s':''} ▾</span>
+          </div>
+          <div style="display:${isToday?'block':'none'}">${outstanding.map(t=>`<div class="outstanding-task">${t.name}</div>`).join('')}</div>
+        </div>` : '';
+
     const card = document.createElement('div');
     card.className = 'day-card'+(allDone?' all-done':'');
     card.innerHTML = `
-      <div class="day-card-head">
-        <div class="day-card-name">${dayNames[d]}</div>
-        <div class="day-card-pct">${pct}%</div>
+      <div class="day-card-head"><div class="day-card-name">${dayNames[d]}</div><div class="day-card-pct">${pct}%</div></div>
+      <div class="day-card-bar-wrap"><div class="day-card-bar" style="width:${pct}%;background:${progressColor(pct)}"></div></div>
+      <div class="day-card-detail">${doneCount} of ${tasks.length} tasks done${allDone?' · All complete!':''}</div>
+      <div class="crafter-summary">
+        <span class="crafter-pill">${crafterCount} crafter${crafterCount!==1?'s':''}</span>
+        <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${ocOpenDone?'var(--green-light)':'var(--ink-faint)'};color:${ocOpenDone?'var(--green)':'var(--ink-mid)'};">${ocOpenDone?'✓':'-'} Opening</span>
+        <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${ocCloseDone?'var(--green-light)':'var(--ink-faint)'};color:${ocCloseDone?'var(--green)':'var(--ink-mid)'};">${ocCloseDone?'✓':'-'} Closing</span>
       </div>
-      <div class="day-card-bar-wrap"><div class="day-card-bar" style="width:${pct}%"></div></div>
-      <div class="day-card-detail">${doneCount} of ${tasks.length} tasks done${allDone?' · All complete!':''}</div>`;
+      ${outstandingHTML}`;
     el.appendChild(card);
+  });
+
+  // Weekly notes summary
+  const notesDays = ['Tue','Wed','Thu','Fri'];
+  const notesEl = document.getElementById('mgrNotesSummary');
+  const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas and shopping list'}];
+  const hasAnyNotes = notesDays.some(d => noteFields.some(f=>(notes[d]||{})[f.key]) || (notes[d]||{}).rating);
+
+  if (!hasAnyNotes) { notesEl.innerHTML = ''; }
+  else {
+    let html = `<div class="notes-summary-card"><div class="notes-summary-title">Weekly notes</div>`;
+    const ratingDays = notesDays.filter(d => (notes[d]||{}).rating);
+    if (ratingDays.length) {
+      html += `<div class="notes-summary-section"><div class="notes-summary-label">Day ratings</div><div style="display:flex;gap:10px;flex-wrap:wrap;">`;
+      ratingDays.forEach(d => {
+        const r = notes[d].rating;
+        html += `<div class="notes-summary-entry" style="display:flex;align-items:center;gap:6px;padding:4px 10px;">
+          <span style="font-size:11px;font-weight:600;color:var(--ink-mid);text-transform:uppercase;letter-spacing:0.05em;">${d}</span>
+          <span style="color:#F5C842;font-size:14px;">${'★'.repeat(r)}${'☆'.repeat(5-r)}</span>
+        </div>`;
+      });
+      html += `</div></div>`;
+    }
+    noteFields.forEach(({key,label}) => {
+      const entries = notesDays.map(d=>({day:d,text:(notes[d]||{})[key]})).filter(e=>e.text);
+      if (!entries.length) return;
+      html += `<div class="notes-summary-section"><div class="notes-summary-label">${label}</div>
+        ${entries.map(e=>`<div class="notes-summary-entry"><div class="notes-summary-entry-day">${e.day}</div><div>${e.text}</div></div>`).join('')}
+      </div>`;
+    });
+    html += `</div>`;
+    notesEl.innerHTML = html;
+  }
+
+  document.getElementById('mgrAiSummary').innerHTML =
+    `<button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Summarise the week with AI</button>`;
+}
+
+// ── OPEN / CLOSE ──────────────────────────────────────────────────────────────
+function renderOpenClose() {
+  const day = selectedDay==='Thu' ? 'Thu' : selectedDay;
+  const dayFullNames = {Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday',Sun:'Sunday'};
+  document.getElementById('oc-day-label').textContent = dayFullNames[day]||day;
+
+  const statusEl = document.getElementById('oc-day-status');
+  statusEl.innerHTML = ['opening','closing'].map(type => {
+    const allDone = isOcComplete(day,type);
+    const label = type==='opening'?'Opening':'Closing';
+    const done = OC_TASKS[type].filter(t=>ocChecked[ocKey(day,type,t)]).length;
+    return allDone
+      ? `<span style="font-size:12px;font-weight:500;color:var(--green);background:var(--green-light);padding:3px 10px;border-radius:99px;">✓ ${label} done</span>`
+      : `<span style="font-size:12px;color:var(--ink-mid);background:var(--ink-faint);padding:3px 10px;border-radius:99px;">${label} · ${done}/${OC_TASKS[type].length}</span>`;
+  }).join('');
+
+  const el = document.getElementById('oc-list');
+  el.innerHTML = '';
+  [{type:'opening',label:'Opening checklist',color:'open'},{type:'closing',label:'Closing checklist',color:'close'}].forEach(({type,label,color}) => {
+    const tasks = OC_TASKS[type];
+    const done = tasks.filter(t=>ocChecked[ocKey(day,type,t)]).length;
+    const pct = Math.round(done/tasks.length*100);
+    const allDone = done===tasks.length;
+    const panel = document.createElement('div');
+    panel.className = 'oc-panel'+((!allDone)?' expanded':'');
+    const statusBadge = allDone
+      ? `<span style="font-size:12px;font-weight:500;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:99px;">✓ Complete</span>`
+      : `<span style="font-size:12px;color:var(--ink-mid);">${done}/${tasks.length}</span>`;
+    panel.innerHTML = `
+      <div class="oc-header" onclick="toggleOcPanel(this)">
+        <div class="oc-header-left"><div class="oc-dot ${color}"></div><div><div class="oc-title">${label}</div></div></div>
+        <div style="display:flex;align-items:center;gap:8px;">${statusBadge}<span class="oc-chevron">▼</span></div>
+      </div>
+      <div class="oc-body">
+        <div class="oc-progress-wrap"><div class="oc-progress-fill ${color}" style="width:${pct}%"></div></div>
+        <div class="oc-progress-label">${done} of ${tasks.length} done</div>
+        <div id="oc-tasks-${type}"></div>
+        <button class="reset-btn" style="margin-top:10px" onclick="resetOc('${type}')">Reset ${type} tasks</button>
+      </div>`;
+    el.appendChild(panel);
+    const taskList = panel.querySelector(`#oc-tasks-${type}`);
+    tasks.forEach(t => {
+      const k = ocKey(day,type,t);
+      const isDone = !!ocChecked[k];
+      const card = document.createElement('div');
+      card.className = 'task'+(isDone?' done':'');
+      card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t}</div></div>`;
+      card.onclick = () => { ocChecked[k]=!ocChecked[k]; save(); renderOpenClose(); };
+      taskList.appendChild(card);
+    });
   });
 }
 
-function resetAll() {
-  if (!confirm('Reset all ticked tasks? This cannot be undone.')) return;
-  checked = {};
-  save();
-  renderStaff();
-  renderManager();
+function toggleOcPanel(header) { header.closest('.oc-panel').classList.toggle('expanded'); }
+
+function resetOc(type) {
+  const day = selectedDay==='Thu'?'Thu':selectedDay;
+  OC_TASKS[type].forEach(t => delete ocChecked[ocKey(day,type,t)]);
+  save(); renderOpenClose();
 }
 
-renderStaff();
+// ── RESET ALL ─────────────────────────────────────────────────────────────────
+function resetAll() {
+  if (!confirm('Reset all tasks, crafter counts and notes for the week? This cannot be undone.')) return;
+  checked={}; crafters={Tue:0,Wed:0,Thu:0,Fri:0}; notes={}; ocChecked={};
+  save(); renderStaff(); renderManager();
+}
+
+// ── AI SUMMARY ────────────────────────────────────────────────────────────────
+async function generateAiSummary() {
+  const notesDays = ['Tue','Wed','Thu','Fri'];
+  const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas and shopping list'}];
+  const hasNotes = notesDays.some(d => noteFields.some(f=>(notes[d]||{})[f.key]));
+  if (!hasNotes) {
+    document.getElementById('mgrAiSummary').innerHTML = `<div class="ai-result"><div class="ai-result-label">Weekly summary</div>No notes have been written yet this week.</div>`;
+    return;
+  }
+  let prompt = "You are helping a small creative shop owner review their week. Here are the team's notes:\n\n";
+  notesDays.forEach(d => {
+    const n = notes[d]||{};
+    if (!noteFields.some(f=>n[f.key]) && !n.rating) return;
+    prompt += `${d}${n.rating?` (rated ${n.rating}/5 stars)`:''}:\n`;
+    noteFields.forEach(({key,label}) => { if (n[key]) prompt += `- ${label}: ${n[key]}\n`; });
+    prompt += '\n';
+  });
+  prompt += 'Write a warm, concise weekly summary (3-5 sentences) for the shop owner. Highlight wins, flag anything needing attention, and surface recurring ideas. Keep it practical and encouraging.';
+  const btn = document.getElementById('aiSummaryBtn');
+  const resultEl = document.getElementById('mgrAiSummary');
+  btn.disabled = true; btn.textContent = 'Thinking…'; resultEl.innerHTML = '';
+  try {
+    const res = await fetch('https://api.anthropic.com/v1/messages', {
+      method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({model:'claude-sonnet-4-20250514',max_tokens:1000,messages:[{role:'user',content:prompt}]})
+    });
+    const data = await res.json();
+    const text = data.content?.map(b=>b.text||'').join('')||'Could not generate summary.';
+    resultEl.innerHTML = `<div class="ai-result"><div class="ai-result-label">✦ Weekly summary</div>${text}</div><button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Regenerate summary</button>`;
+  } catch(e) {
+    resultEl.innerHTML = `<div class="ai-result">Something went wrong — please try again.</div><button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Try again</button>`;
+  }
+  if (document.getElementById('aiSummaryBtn')) document.getElementById('aiSummaryBtn').disabled = false;
+}
+
+// ── CONFETTI ──────────────────────────────────────────────────────────────────
+function launchConfetti() {
+  const canvas = document.getElementById('confetti-canvas');
+  const ctx = canvas.getContext('2d');
+  canvas.width = window.innerWidth; canvas.height = window.innerHeight;
+  const colours = ['#C4714A','#2A7A52','#B8710A','#2A5BA8','#9F4AB0','#E05B8C','#F5C842'];
+  const pieces = Array.from({length:120},()=>({
+    x:Math.random()*canvas.width, y:Math.random()*-canvas.height,
+    w:6+Math.random()*8, h:10+Math.random()*6,
+    color:colours[Math.floor(Math.random()*colours.length)],
+    rot:Math.random()*360, rotSpeed:(Math.random()-0.5)*6,
+    vx:(Math.random()-0.5)*3, vy:3+Math.random()*4, opacity:1,
+  }));
+  let frame, elapsed=0;
+  function draw() {
+    ctx.clearRect(0,0,canvas.width,canvas.height); elapsed++;
+    let alive=false;
+    pieces.forEach(p => {
+      p.x+=p.vx; p.y+=p.vy; p.rot+=p.rotSpeed;
+      if (elapsed>80) p.opacity=Math.max(0,p.opacity-0.015);
+      if (p.y<canvas.height+20) alive=true;
+      ctx.save(); ctx.globalAlpha=p.opacity; ctx.translate(p.x,p.y); ctx.rotate(p.rot*Math.PI/180);
+      ctx.fillStyle=p.color; ctx.fillRect(-p.w/2,-p.h/2,p.w,p.h); ctx.restore();
+    });
+    if (alive) frame=requestAnimationFrame(draw);
+    else ctx.clearRect(0,0,canvas.width,canvas.height);
+  }
+  if (frame) cancelAnimationFrame(frame); draw();
+}
+
+// ── INIT ──────────────────────────────────────────────────────────────────────
+async function init() {
+  await loadFromSupabase();
+  document.getElementById('loading-screen').classList.add('hidden');
+  renderStaff();
+  renderOpenClose();
+}
+
+init();
 </script>
 </body>
 </html>
