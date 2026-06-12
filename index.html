@@ -290,32 +290,35 @@ async function loadFromSupabase() {
       headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` }
     });
     const rows = await res.json();
+    console.log('Supabase load:', rows?.length, 'rows', rows?.[0] ? 'has data' : 'empty');
     if (rows && rows[0]) {
       checked      = rows[0].checked      || {};
-      crafters     = rows[0].crafters     || {Tue:0,Wed:0,Thu:0,Fri:0};
+      crafters     = rows[0].crafters     || {Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0};
       notes        = rows[0].notes        || {};
       ocChecked    = rows[0].oc_checked   || {};
       customTasks  = rows[0].custom_tasks || {};
     }
+    // If rows is empty array, row doesn't exist yet — that's fine, start fresh
   } catch(e) {
     console.error('Load error:', e);
   } finally {
-    isLoaded = true; // allow saves from this point on
+    isLoaded = true;
   }
 }
 
 async function persistToSupabase() {
   showSync('saving');
   try {
-    await fetch(`${SUPABASE_URL}/rest/v1/weekly_data?id=eq.${ROW_ID}`, {
-      method: 'PATCH',
+    await fetch(`${SUPABASE_URL}/rest/v1/weekly_data`, {
+      method: 'POST',
       headers: {
         'apikey': SUPABASE_KEY,
         'Authorization': `Bearer ${SUPABASE_KEY}`,
         'Content-Type': 'application/json',
-        'Prefer': 'return=minimal'
+        'Prefer': 'resolution=merge-duplicates,return=minimal'
       },
       body: JSON.stringify({
+        id: ROW_ID,
         checked, crafters, notes, oc_checked: ocChecked,
         custom_tasks: customTasks,
         updated_at: new Date().toISOString()
@@ -939,13 +942,35 @@ function renderManager() {
   const dayToWd = {Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0};
   const dayLabels = {Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'};
 
+  const CRAFTER_TARGET = 100;
+  const totalCraftersWeek = ['Tue','Wed','Thu','Fri','Sat','Sun'].reduce((s,d) => s + (crafters[d]||0), 0);
+  const crafterPct = Math.min(100, Math.round(totalCraftersWeek / CRAFTER_TARGET * 100));
+  const crafterColor = crafterPct >= 100 ? '#1D9E75' : crafterPct >= 60 ? 'var(--amber)' : 'var(--clay)';
+  const totalEl = document.createElement('div');
+  totalEl.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;';
+  totalEl.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:13px;color:var(--ink-mid);">👥 Total crafters this week</div>
+      <div style="font-size:20px;font-weight:600;color:var(--ink);">${totalCraftersWeek}<span style="font-size:13px;font-weight:400;color:var(--ink-mid);">/${CRAFTER_TARGET}</span></div>
+    </div>
+    <div style="background:var(--ink-faint);border-radius:99px;height:6px;overflow:hidden;margin-bottom:5px;">
+      <div style="height:100%;border-radius:99px;background:${crafterColor};width:${crafterPct}%;transition:width 0.4s;"></div>
+    </div>
+    <div style="font-size:11px;color:var(--ink-mid);">${crafterPct >= 100 ? '🎉 Target reached!' : `${CRAFTER_TARGET - totalCraftersWeek} to go`}</div>`;
+  el.appendChild(totalEl);
+
   // ── 3-col day grid ──────────────────────────────────────────────────────
   const grid = document.createElement('div');
   grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:20px;';
 
   ['Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d => {
     const wd = dayToWd[d];
-    const isPast = wd < todayWd || (wd === 0 && todayWd > 0);
+    // Fix: treat week as Tue–Sun, where Sun wraps around after Sat
+    // Days in week order: Tue(2), Wed(3), Thu(4), Fri(5), Sat(6), Sun(0)
+    const weekOrder = [2,3,4,5,6,0];
+    const todayIdx = weekOrder.indexOf(todayWd);
+    const dayIdx   = weekOrder.indexOf(wd);
+    const isPast = todayIdx >= 0 && dayIdx < todayIdx;
     const isToday = wd === todayWd;
     const hasData = isPast || isToday;
 
