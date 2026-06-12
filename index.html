@@ -173,58 +173,17 @@
 <canvas id="confetti-canvas"></canvas>
 
 <nav class="nav">
-  <button class="nav-btn active" onclick="switchView('staff')">Daily checklist</button>
-  <button class="nav-btn" onclick="switchView('openclose')">Open / Close</button>
+  <button class="nav-btn active" onclick="switchView('today')">Today</button>
+  <button class="nav-btn" onclick="switchView('staff')">Week</button>
   <button class="nav-btn" onclick="switchView('manager')">Summary</button>
 </nav>
 
-<div id="staff-view" class="view active">
-  <div class="day-tabs" id="dayTabs"></div>
-  <div class="crafter-bar">
-    <div class="crafter-label">Crafters today</div>
-    <div class="crafter-controls">
-      <button class="crafter-btn" onclick="changeCrafters(-1)">−</button>
-      <div class="crafter-count" id="crafterCount">0</div>
-      <button class="crafter-btn" onclick="changeCrafters(1)">+</button>
-    </div>
-  </div>
-  <div class="all-done-banner" id="allDoneBanner">All tasks complete for today! 🎉</div>
-  <div class="progress-wrap"><div class="progress-fill" id="progressFill" style="width:0%"></div></div>
-  <div class="progress-label" id="progressLabel"></div>
-  <div id="taskList"></div>
-  <div class="notes-section">
-    <div class="notes-heading">Notes</div>
-    <div class="star-row">
-      <div class="star-label">Rate the day</div>
-      <div class="stars" id="starRating">
-        <span class="star" onclick="setRating(1)">★</span>
-        <span class="star" onclick="setRating(2)">★</span>
-        <span class="star" onclick="setRating(3)">★</span>
-        <span class="star" onclick="setRating(4)">★</span>
-        <span class="star" onclick="setRating(5)">★</span>
-      </div>
-    </div>
-    <div class="note-block">
-      <div class="note-label">What went well</div>
-      <textarea class="note-input" id="note-well" placeholder="Add notes here…" oninput="saveNote('well')"></textarea>
-    </div>
-    <div class="note-block">
-      <div class="note-label">What could be improved</div>
-      <textarea class="note-input" id="note-improve" placeholder="Add notes here…" oninput="saveNote('improve')"></textarea>
-    </div>
-    <div class="note-block">
-      <div class="note-label">Ideas and shopping list</div>
-      <textarea class="note-input" id="note-ideas" placeholder="Add notes here…" oninput="saveNote('ideas')"></textarea>
-    </div>
-  </div>
+<div id="today-view" class="view active">
+  <div id="today-content"></div>
 </div>
 
-<div id="openclose-view" class="view">
-  <div id="oc-day-header" style="margin-bottom:14px;">
-    <div id="oc-day-label" style="font-size:18px;font-weight:600;color:var(--ink);margin-bottom:6px;"></div>
-    <div id="oc-day-status" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
-  </div>
-  <div id="oc-list"></div>
+<div id="staff-view" class="view">
+  <div id="weekly-summary"></div>
 </div>
 
 <div id="manager-view" class="view">
@@ -234,13 +193,15 @@
   <div id="mgrCards"></div>
   <div id="mgrNotesSummary"></div>
   <div id="mgrAiSummary"></div>
+  <button class="ai-summary-btn" style="margin-top:8px;" onclick="archiveWeek()">Archive this week</button>
   <button class="reset-btn" onclick="resetAll()">Reset all tasks</button>
+  <div id="mgrHistory"></div>
 </div>
 
 <script>
 // ── SUPABASE CONFIG ───────────────────────────────────────────────────────────
-const SUPABASE_URL = 'https://vpavavdyqwbmzthwcdpr.supabase.co';
-const SUPABASE_KEY = 'sb_publishable_wZtssMFiojyFk8oBj2Wmhw_S_1XYw7O';
+const SUPABASE_URL = 'YOUR_SUPABASE_URL';
+const SUPABASE_KEY = 'YOUR_SUPABASE_ANON_KEY';
 const ROW_ID = 'current-week';
 
 // ── TASK DATA ─────────────────────────────────────────────────────────────────
@@ -461,8 +422,9 @@ function setRating(val) {
 // ── CRAFTERS ──────────────────────────────────────────────────────────────────
 function changeCrafters(delta) {
   crafters[selectedDay] = Math.max(0, (crafters[selectedDay] || 0) + delta);
-  document.getElementById('crafterCount').textContent = crafters[selectedDay];
   save();
+  const el = document.getElementById('crafterCount');
+  if (el) el.textContent = crafters[selectedDay];
 }
 
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
@@ -472,102 +434,359 @@ function switchView(v) {
   document.getElementById(v+'-view').classList.add('active');
   event.currentTarget.classList.add('active');
   if (v==='manager') { renderManager(); }
-  if (v==='openclose') { renderOpenClose(); }
+  if (v==='today') { renderToday(); }
+  if (v==='staff') { renderWeeklySummary(); }
 }
 
-// ── RENDER: STAFF VIEW ────────────────────────────────────────────────────────
-function renderTabs() {
-  const el = document.getElementById('dayTabs');
+// ── RENDER: TODAY VIEW ────────────────────────────────────────────────────────
+function renderToday() {
+  const day = selectedDay === 'Thu' ? 'Thu' : selectedDay;
+  const dayFullNames = {Tue:'Tuesday', Wed:'Wednesday', Thu:'Thursday', Fri:'Friday', Sat:'Saturday', Sun:'Sunday'};
+  const el = document.getElementById('today-content');
   el.innerHTML = '';
-  DAYS.forEach(d => {
-    const tasks = tasksForDay(d);
-    const done = d==='Thu' ? 0 : tasks.filter(t => checked[key(d,t.name)]).length;
-    const btn = document.createElement('button');
-    btn.className = 'day-tab' + (d===selectedDay?' active':'');
-    const countText = d==='Thu' ? (tasks.length>0 ? tasks.length+' left' : 'clear') : done+'/'+tasks.length;
-    btn.innerHTML = `${d}<span class="tab-count">${countText}</span>`;
-    btn.onclick = () => { selectedDay=d; renderStaff(); };
-    el.appendChild(btn);
-  });
-}
 
-function renderStaff() {
-  renderTabs();
-  const tasks = tasksForDay(selectedDay);
-  const isThursday = selectedDay === 'Thu';
+  // Day heading
+  const heading = document.createElement('div');
+  heading.style.cssText = 'font-size:22px;font-weight:600;color:var(--ink);margin-bottom:4px;';
+  heading.textContent = dayFullNames[day] || day;
+  el.appendChild(heading);
+  const sub = document.createElement('div');
+  sub.style.cssText = 'font-size:12px;color:var(--ink-mid);margin-bottom:18px;';
+  sub.textContent = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
+  el.appendChild(sub);
 
-  document.getElementById('crafterCount').textContent = crafters[selectedDay] || 0;
-  loadNotes(selectedDay);
+  // Helper: build an OC section
+  function buildOcSection(type, label, color, dotColor) {
+    const tasks = OC_TASKS[type];
+    const done = tasks.filter(t => ocChecked[ocKey(day, type, t)]).length;
+    const pct = Math.round(done/tasks.length*100);
+    const allDone = done === tasks.length;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
+    const statusBadge = allDone
+      ? `<span style="font-size:12px;font-weight:500;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:99px;">✓ Complete</span>`
+      : `<span style="font-size:12px;color:var(--ink-mid);">${done}/${tasks.length}</span>`;
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;" onclick="this.closest('[data-oc]').classList.toggle('exp-oc')">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="width:9px;height:9px;border-radius:50%;background:${dotColor};flex-shrink:0;"></div>
+          <div style="font-size:14px;font-weight:500;color:var(--ink);">${label}</div>
+        </div>
+        <div style="display:flex;align-items:center;gap:8px;">${statusBadge}<span style="font-size:11px;color:var(--ink-mid);transition:transform 0.2s;" class="oc-chev-today">▼</span></div>
+      </div>
+      <div class="oc-body-today" style="display:${allDone?'none':'block'};padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
+        <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:8px 0 4px;overflow:hidden;"><div style="height:100%;border-radius:99px;background:${dotColor};width:${pct}%;"></div></div>
+        <div style="font-size:11px;color:var(--ink-mid);margin-bottom:8px;">${done} of ${tasks.length} done</div>
+        <div id="today-oc-${type}"></div>
+      </div>`;
+    wrap.setAttribute('data-oc', type);
+    el.appendChild(wrap);
 
-  let doneCount, pct;
-  if (isThursday) {
-    doneCount = 0; pct = tasks.length===0 ? 100 : 0;
-  } else {
-    doneCount = tasks.filter(t => checked[key(selectedDay,t.name)]).length;
-    pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 100;
+    // Toggle expand/collapse on header click
+    wrap.querySelector('[onclick]').addEventListener('click', function() {
+      const body = wrap.querySelector('.oc-body-today');
+      const chev = wrap.querySelector('.oc-chev-today');
+      body.style.display = body.style.display === 'none' ? 'block' : 'none';
+      chev.style.transform = body.style.display === 'none' ? '' : 'rotate(180deg)';
+    });
+
+    const taskList = wrap.querySelector(`#today-oc-${type}`);
+    tasks.forEach(t => {
+      const k2 = ocKey(day, type, t);
+      const isDone = !!ocChecked[k2];
+      const card = document.createElement('div');
+      card.className = 'task'+(isDone?' done':'');
+      card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t}</div></div>`;
+      card.onclick = () => { ocChecked[k2]=!ocChecked[k2]; save(); renderToday(); };
+      taskList.appendChild(card);
+    });
   }
 
-  const bar = document.getElementById('progressFill');
-  const prevPct = parseInt(bar.style.width) || 0;
-  bar.style.width = pct+'%';
-  bar.style.background = progressColor(pct);
-  if (pct===100 && prevPct<100) launchConfetti();
-  document.getElementById('progressLabel').textContent = isThursday
-    ? (tasks.length===0 ? 'No leftover tasks — all clear!' : tasks.length+' task'+(tasks.length>1?'s':'')+' carried over from Tue/Wed')
-    : doneCount+' of '+tasks.length+' tasks done';
-  document.getElementById('allDoneBanner').classList.toggle('show', !isThursday && doneCount===tasks.length && tasks.length>0);
+  // Helper: build task section
+  function buildTaskSection() {
+    const tasks = tasksForDay(selectedDay);
+    const isThursday = selectedDay === 'Thu';
+    const doneCount = isThursday ? 0 : tasks.filter(t => checked[key(t.originalDay||selectedDay, t.name)]).length;
+    const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 100;
 
-  const groups = {P0:[],P1:[],P2:[]};
-  tasks.forEach(t => groups[t.priority].push(t));
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
+
+    const groups = {P0:[],P1:[],P2:[]};
+    tasks.forEach(t => groups[t.priority].push(t));
+    const typeOrder = {'Pottery delivery':0,'Clean':1,'Organise':2,'Stock count':3,'Garden':4};
+    const sortGroup = arr => arr.sort((a,b)=>{const s=(a.sortOrder??99)-(b.sortOrder??99);return s!==0?s:(typeOrder[a.type]??99)-(typeOrder[b.type]??99);});
+    ['P0','P1','P2'].forEach(p=>sortGroup(groups[p]));
+    const pLabels = {P0:'Must do',P1:'Important',P2:'Last up'};
+
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayTasks(this)">
+        <div style="font-size:14px;font-weight:500;color:var(--ink);">Tasks</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:12px;color:var(--ink-mid);">${doneCount}/${tasks.length}</span>
+          <span style="font-size:11px;color:var(--ink-mid);" class="tasks-chev">▼</span>
+        </div>
+      </div>
+      <div id="today-task-inner" style="padding:0 14px 12px;">
+        <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:10px 0 4px;overflow:hidden;"><div id="today-prog-fill" style="height:100%;border-radius:99px;background:${progressColor(pct)};width:${pct}%;transition:width 0.4s;"></div></div>
+        <div style="font-size:11px;color:var(--ink-mid);margin-bottom:10px;" id="today-prog-lbl">${doneCount} of ${tasks.length} tasks done</div>
+        <div id="today-task-list"></div>
+      </div>`;
+    el.appendChild(wrap);
+
+    const list = wrap.querySelector('#today-task-list');
+    if (isThursday && tasks.length === 0) {
+      const e = document.createElement('div');
+      e.style.cssText = 'text-align:center;padding:20px;color:var(--ink-mid);font-size:13px;';
+      e.textContent = 'Nothing left — great work!';
+      list.appendChild(e);
+    } else {
+      ['P0','P1','P2'].forEach(p => {
+        if (!groups[p].length) return;
+        const sec = document.createElement('div');
+        sec.className = 'section-head';
+        sec.textContent = pLabels[p];
+        list.appendChild(sec);
+        groups[p].forEach(t => {
+          const srcDay = isThursday ? t.originalDay : selectedDay;
+          const k2 = key(srcDay, t.name);
+          const isDone = !!checked[k2];
+          const card = document.createElement('div');
+          card.className = 'task'+(isDone?' done':'');
+          card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div><div class="task-meta">${t.time?`<span class="badge badge-time">${t.time}</span>`:''}<span class="badge badge-type-${typeBadgeClass(t.type)}">${t.type}</span></div></div>`;
+          card.onclick = () => { checked[k2]=!checked[k2]; save(); renderToday(); renderStaff(); };
+          list.appendChild(card);
+        });
+      });
+    }
+  }
+
+  // Helper: notes section
+  function buildNotesSection() {
+    const n = notes[selectedDay] || {};
+    const hasNotes = n.well || n.improve || n.ideas || n.rating;
+    const wrap = document.createElement('div');
+    wrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
+
+    const starsHTML = `<div style="display:flex;gap:3px;">${[1,2,3,4,5].map(i=>`<span onclick="setRatingToday(${i})" style="font-size:22px;cursor:pointer;color:${(n.rating||0)>=i?'#F5C842':'var(--ink-faint)'};">★</span>`).join('')}</div>`;
+
+    wrap.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayNotes(this)">
+        <div style="font-size:14px;font-weight:500;color:var(--ink);">Notes</div>
+        <span style="font-size:11px;color:var(--ink-mid);" class="notes-chev">▼</span>
+      </div>
+      <div id="today-notes-inner" style="padding:12px 14px;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);">Rate the day</div>
+          ${starsHTML}
+        </div>
+        <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What went well</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;" placeholder="Add notes here…" oninput="saveTodayNote('well',this.value)">${n.well||''}</textarea></div>
+        <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What could be improved</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;" placeholder="Add notes here…" oninput="saveTodayNote('improve',this.value)">${n.improve||''}</textarea></div>
+        <div><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">Ideas and shopping list</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;" placeholder="Add notes here…" oninput="saveTodayNote('ideas',this.value)">${n.ideas||''}</textarea></div>
+      </div>`;
+    el.appendChild(wrap);
+  }
+
+  // Build the page in order
+  // Crafter counter
+  const crafterBar = document.createElement('div');
+  crafterBar.className = 'crafter-bar';
+  crafterBar.innerHTML = `
+    <div class="crafter-label">Crafters today</div>
+    <div class="crafter-controls">
+      <button class="crafter-btn" onclick="changeCrafters(-1)">−</button>
+      <div class="crafter-count" id="crafterCount">${crafters[selectedDay]||0}</div>
+      <button class="crafter-btn" onclick="changeCrafters(1)">+</button>
+    </div>`;
+  el.appendChild(crafterBar);
+
+  buildOcSection('opening', 'Opening checklist', 'open', 'var(--green)');
+  buildTaskSection();
+  buildOcSection('closing', 'Closing checklist', 'close', 'var(--clay)');
+  buildNotesSection();
+}
+
+function toggleTodayTasks(hdr) {
+  const inner = document.getElementById('today-task-inner');
+  const chev = hdr.querySelector('.tasks-chev');
+  inner.style.display = inner.style.display === 'none' ? 'block' : 'none';
+  chev.style.transform = inner.style.display === 'none' ? '' : 'rotate(180deg)';
+}
+
+function toggleTodayNotes(hdr) {
+  const inner = document.getElementById('today-notes-inner');
+  const chev = hdr.querySelector('.notes-chev');
+  inner.style.display = inner.style.display === 'none' ? 'block' : 'none';
+  chev.style.transform = inner.style.display === 'none' ? '' : 'rotate(180deg)';
+}
+
+function saveTodayNote(field, val) {
+  if (!notes[selectedDay]) notes[selectedDay] = {};
+  notes[selectedDay][field] = val;
+  // Keep the staff view notes inputs in sync
+  const staffInput = document.getElementById('note-'+field);
+  if (staffInput) staffInput.value = val;
+  save();
+}
+
+function setRatingToday(val) {
+  if (!notes[selectedDay]) notes[selectedDay] = {};
+  notes[selectedDay].rating = notes[selectedDay].rating === val ? 0 : val;
+  renderStars(notes[selectedDay].rating);
+  save();
+  renderToday();
+}
+
+// ── RENDER: WEEKLY SUMMARY (Week tab) ──────────────────────────────────────────
+function renderWeeklySummary() {
+  const el = document.getElementById('weekly-summary');
+  if (!el) return;
+  el.innerHTML = '';
+
   const typeOrder = {'Pottery delivery':0,'Clean':1,'Organise':2,'Stock count':3,'Garden':4};
   const sortGroup = arr => arr.sort((a,b) => {
-    const so = (a.sortOrder??99)-(b.sortOrder??99);
-    return so!==0 ? so : (typeOrder[a.type]??99)-(typeOrder[b.type]??99);
+    const s = (a.sortOrder??99)-(b.sortOrder??99);
+    return s!==0 ? s : (typeOrder[a.type]??99)-(typeOrder[b.type]??99);
   });
-  ['P0','P1','P2'].forEach(p => sortGroup(groups[p]));
+  const pLabels = {P0:'Must do', P1:'Important', P2:'Last up'};
+  const dayNames = {Tue:'Tuesday', Wed:'Wednesday', Fri:'Friday'};
 
-  const list = document.getElementById('taskList');
-  list.innerHTML = '';
-  if (isThursday && tasks.length===0) {
-    const e = document.createElement('div');
-    e.style.cssText = 'text-align:center;padding:40px 20px;color:var(--ink-mid);font-size:14px;';
-    e.textContent = 'Nothing left over — great work!';
-    list.appendChild(e); return;
-  }
+  // Type colours matching badge classes
+  const typeColors = {
+    'Pottery delivery': {bg:'#FDF0DC', color:'#B8710A'},
+    'Clean':            {bg:'#E8F0FB', color:'#2A5BA8'},
+    'Organise':         {bg:'#E4F2EB', color:'#2A7A52'},
+    'Stock count':      {bg:'#EEE8FB', color:'#4A3AA8'},
+    'Garden':           {bg:'#FEF9E0', color:'#92700A'},
+  };
 
-  const pLabels = {P0:'Must do',P1:'Important',P2:'Last up'};
-  ['P0','P1','P2'].forEach(p => {
-    if (!groups[p].length) return;
-    const sec = document.createElement('div');
-    sec.className = 'section-head';
-    sec.textContent = pLabels[p];
-    list.appendChild(sec);
-    groups[p].forEach(t => {
-      const srcDay = isThursday ? t.originalDay : selectedDay;
-      const k = key(srcDay, t.name);
-      const done = !!checked[k];
-      const card = document.createElement('div');
-      card.className = 'task'+(done?' done':'');
-      const fromBadge = isThursday ? `<span class="badge" style="background:var(--ink-faint);color:var(--ink-mid)">From ${t.originalDay}</span>` : '';
-      card.innerHTML = `
-        <div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div>
-        <div class="task-body">
-          <div class="task-name">${t.name}</div>
-          <div class="task-meta">
-            ${t.time?`<span class="badge badge-time">${t.time}</span>`:''}
-            <span class="badge badge-type-${typeBadgeClass(t.type)}">${t.type}</span>
-            ${fromBadge}
-          </div>
-        </div>`;
-      card.onclick = () => { checked[k]=!checked[k]; save(); renderStaff(); };
-      list.appendChild(card);
+  // Weekly type summary at the top
+  const allWeekTasks = TASKS.filter(t => t.day !== 'Thu');
+  const weekTypeCounts = {};
+  allWeekTasks.forEach(t => { weekTypeCounts[t.type] = (weekTypeCounts[t.type]||0) + 1; });
+  const weekDone = allWeekTasks.filter(t => checked[key(t.day, t.name)]).length;
+  const weekPct = allWeekTasks.length ? Math.round(weekDone/allWeekTasks.length*100) : 0;
+
+  const summary = document.createElement('div');
+  summary.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;';
+  const typePills = Object.entries(weekTypeCounts)
+    .sort((a,b) => (typeOrder[a[0]]??99)-(typeOrder[b[0]]??99))
+    .map(([type, count]) => {
+      const c = typeColors[type] || {bg:'var(--ink-faint)', color:'var(--ink-mid)'};
+      return `<span style="font-size:11px;font-weight:500;padding:3px 8px;border-radius:99px;background:${c.bg};color:${c.color};">${count} ${type}</span>`;
+    }).join('');
+  summary.innerHTML = `
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+      <div style="font-size:13px;font-weight:500;color:var(--ink);">This week</div>
+      <div style="font-size:12px;color:var(--ink-mid);">${weekDone}/${allWeekTasks.length} done</div>
+    </div>
+    <div style="background:var(--ink-faint);border-radius:99px;height:4px;overflow:hidden;margin-bottom:10px;">
+      <div style="height:100%;border-radius:99px;background:${progressColor(weekPct)};width:${weekPct}%;transition:width 0.4s;"></div>
+    </div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;">${typePills}</div>`;
+  el.appendChild(summary);
+
+  // Day cards
+  ['Tue','Wed','Fri'].forEach(d => {
+    const tasks = TASKS.filter(t => t.day === d);
+    const doneCount = tasks.filter(t => checked[key(d, t.name)]).length;
+    const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
+
+    // Per-day type counts
+    const dayTypeCounts = {};
+    tasks.forEach(t => { dayTypeCounts[t.type] = (dayTypeCounts[t.type]||0) + 1; });
+    const dayTypePills = Object.entries(dayTypeCounts)
+      .sort((a,b) => (typeOrder[a[0]]??99)-(typeOrder[b[0]]??99))
+      .map(([type, count]) => {
+        const c = typeColors[type] || {bg:'var(--ink-faint)', color:'var(--ink-mid)'};
+        return `<span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:99px;background:${c.bg};color:${c.color};">${count} ${type}</span>`;
+      }).join('');
+
+    const card = document.createElement('div');
+    card.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;';
+
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'padding:12px 14px;cursor:pointer;';
+    hdr.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:5px;">
+        <div style="font-size:14px;font-weight:500;color:${pct===100?'var(--green)':'var(--ink)'};">${dayNames[d]}</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <div style="font-size:12px;color:var(--ink-mid);">${doneCount}/${tasks.length}</div>
+          <span style="font-size:11px;color:var(--ink-mid);transition:transform 0.2s;" data-chev>▶</span>
+        </div>
+      </div>
+      <div style="background:var(--ink-faint);border-radius:99px;height:3px;overflow:hidden;margin-bottom:8px;">
+        <div style="height:100%;border-radius:99px;background:${progressColor(pct)};width:${pct}%;"></div>
+      </div>
+      <div style="display:flex;gap:4px;flex-wrap:wrap;">${dayTypePills}</div>`;
+    card.appendChild(hdr);
+
+    // Body — collapsed by default
+    const body = document.createElement('div');
+    body.style.cssText = 'display:none;padding:4px 14px 12px;border-top:1px solid var(--ink-faint);';
+
+    const groups = {P0:[], P1:[], P2:[]};
+    tasks.forEach(t => groups[t.priority].push(t));
+    ['P0','P1','P2'].forEach(p => sortGroup(groups[p]));
+
+    ['P0','P1','P2'].forEach(p => {
+      if (!groups[p].length) return;
+      const secHead = document.createElement('div');
+      secHead.className = 'section-head';
+      secHead.textContent = pLabels[p];
+      body.appendChild(secHead);
+      groups[p].forEach(t => {
+        const isDone = !!checked[key(d, t.name)];
+        const row = document.createElement('div');
+        row.style.cssText = 'padding:5px 0;border-bottom:0.5px solid var(--ink-faint);';
+        row.innerHTML = `<div style="font-size:13px;color:${isDone?'var(--ink-mid)':'var(--ink)'};${isDone?'text-decoration:line-through;':''}">${t.name}</div>`;
+        body.appendChild(row);
+      });
     });
+
+    card.appendChild(body);
+
+    // Toggle
+    hdr.addEventListener('click', () => {
+      const open = body.style.display !== 'none';
+      body.style.display = open ? 'none' : 'block';
+      hdr.querySelector('[data-chev]').style.transform = open ? '' : 'rotate(90deg)';
+    });
+
+    el.appendChild(card);
   });
+}
+
+// Keep renderStaff as an alias that re-renders both Today and Weekly Summary
+function renderStaff() {
+  renderWeeklySummary();
+  if (document.getElementById('today-view').classList.contains('active')) {
+    renderToday();
+  }
 }
 
 // ── RENDER: MANAGER VIEW ──────────────────────────────────────────────────────
 function renderManager() {
   document.getElementById('mgrDate').textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+
+  // Weekly open/close grid
+  const ocWeekEl = document.getElementById('mgrOcWeek');
+  const allDays = ['Tue','Wed','Thu','Fri','Sat','Sun'];
+  let ocWeekHTML = `<div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;">`;
+  [{type:'opening',label:'Opening',dot:'var(--green)'},{type:'closing',label:'Closing',dot:'var(--clay)'}].forEach(({type,label,dot}) => {
+    ocWeekHTML += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:${dot};flex-shrink:0;"></div><div style="font-size:12px;font-weight:500;color:var(--ink);">${label}</div></div>
+    <div style="display:flex;gap:5px;margin-bottom:12px;">`;
+    allDays.forEach(d => {
+      const complete = isOcComplete(d, type);
+      ocWeekHTML += `<div style="flex:1;text-align:center;">
+        <div style="font-size:10px;color:var(--ink-mid);margin-bottom:3px;">${d}</div>
+        <div style="height:26px;border-radius:5px;background:${complete?'var(--green-light)':'var(--ink-faint)'};display:flex;align-items:center;justify-content:center;font-size:11px;color:${complete?'var(--green)':'var(--ink-mid)'};">${complete?'✓':'–'}</div>
+      </div>`;
+    });
+    ocWeekHTML += `</div>`;
+  });
+  ocWeekHTML += `</div>`;
+  ocWeekEl.innerHTML = ocWeekHTML;
 
   const el = document.getElementById('mgrCards');
   el.innerHTML = '';
@@ -653,6 +872,8 @@ function renderManager() {
 
   document.getElementById('mgrAiSummary').innerHTML =
     `<button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Summarise the week with AI</button>`;
+
+  renderHistory();
 }
 
 // ── OPEN / CLOSE ──────────────────────────────────────────────────────────────
@@ -721,6 +942,126 @@ function resetAll() {
   if (!confirm('Reset all tasks, crafter counts and notes for the week? This cannot be undone.')) return;
   checked={}; crafters={Tue:0,Wed:0,Thu:0,Fri:0}; notes={}; ocChecked={};
   save(); renderStaff(); renderManager();
+}
+
+// ── ARCHIVE ───────────────────────────────────────────────────────────────────
+async function archiveWeek() {
+  const btn = event.currentTarget;
+  btn.disabled = true;
+  btn.textContent = 'Archiving…';
+
+  // week_ending = most recent Friday
+  const today = new Date();
+  const day = today.getDay();
+  const diff = day <= 5 ? (day === 0 ? 6 : day - 5 + 7) % 7 : 0;
+  const friday = new Date(today);
+  friday.setDate(today.getDate() - (day === 5 ? 0 : (day < 5 ? day + 2 : day - 5)));
+  const weekEnding = friday.toISOString().split('T')[0];
+
+  try {
+    const res = await fetch(`${SUPABASE_URL}/rest/v1/weekly_archive`, {
+      method: 'POST',
+      headers: {
+        'apikey': SUPABASE_KEY,
+        'Authorization': `Bearer ${SUPABASE_KEY}`,
+        'Content-Type': 'application/json',
+        'Prefer': 'return=minimal'
+      },
+      body: JSON.stringify({
+        week_ending: weekEnding,
+        checked, crafters, notes, oc_checked: ocChecked
+      })
+    });
+    if (res.ok) {
+      btn.textContent = '✓ Archived!';
+      setTimeout(() => { btn.disabled = false; btn.textContent = 'Archive this week'; }, 2500);
+      renderHistory();
+    } else {
+      throw new Error('Archive failed');
+    }
+  } catch(e) {
+    btn.disabled = false;
+    btn.textContent = 'Archive this week';
+    alert('Something went wrong — make sure the weekly_archive table exists in Supabase.');
+  }
+}
+
+async function loadHistory() {
+  try {
+    const res = await fetch(
+      `${SUPABASE_URL}/rest/v1/weekly_archive?select=*&order=week_ending.desc&limit=20`,
+      { headers: { 'apikey': SUPABASE_KEY, 'Authorization': `Bearer ${SUPABASE_KEY}` } }
+    );
+    return await res.json();
+  } catch(e) { return []; }
+}
+
+async function renderHistory() {
+  const el = document.getElementById('mgrHistory');
+  el.innerHTML = `<div style="font-size:12px;color:var(--ink-mid);padding:12px 0;">Loading history…</div>`;
+  const rows = await loadHistory();
+  if (!rows.length) { el.innerHTML = ''; return; }
+
+  const noteFields = [{k:'well',l:'What went well'},{k:'improve',l:'What could be improved'},{k:'ideas',l:'Ideas and shopping list'}];
+  const dayNames = {Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri'};
+
+  let html = `<div style="margin-top:20px;padding-top:20px;border-top:1px solid var(--ink-faint);">
+    <div style="font-size:15px;font-weight:500;color:var(--ink);margin-bottom:12px;">Past weeks</div>`;
+
+  rows.forEach(row => {
+    const d = new Date(row.week_ending);
+    const label = d.toLocaleDateString('en-GB', {day:'numeric', month:'long', year:'numeric'});
+    const allTasks = TASKS.filter(t => t.day !== 'Thu');
+    const totalDone = allTasks.filter(t => (row.checked||{})[key(t.day, t.name)]).length;
+    const pct = allTasks.length ? Math.round(totalDone/allTasks.length*100) : 0;
+
+    // Notes summary
+    const notesDays = ['Tue','Wed','Thu','Fri'];
+    const hasNotes = notesDays.some(d2 => noteFields.some(f => (row.notes||{})[d2]?.[f.k]));
+    const hasRatings = notesDays.some(d2 => (row.notes||{})[d2]?.rating);
+
+    // Avg rating
+    const ratings = notesDays.map(d2 => (row.notes||{})[d2]?.rating).filter(Boolean);
+    const avgRating = ratings.length ? Math.round(ratings.reduce((a,b)=>a+b,0)/ratings.length) : 0;
+
+    html += `<div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
+      <div style="padding:12px 14px;cursor:pointer;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';this.querySelector('[data-chev]').style.transform=this.nextElementSibling.style.display==='block'?'rotate(90deg)':'';">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px;">
+          <div style="font-size:13px;font-weight:500;color:var(--ink);">Week ending ${label}</div>
+          <div style="display:flex;align-items:center;gap:8px;">
+            ${avgRating ? `<span style="color:#F5C842;font-size:12px;">${'★'.repeat(avgRating)}</span>` : ''}
+            <span style="font-size:11px;color:var(--ink-mid);" data-chev>▶</span>
+          </div>
+        </div>
+        <div style="background:var(--ink-faint);border-radius:99px;height:3px;overflow:hidden;margin-bottom:6px;">
+          <div style="height:100%;border-radius:99px;background:${progressColor(pct)};width:${pct}%;"></div>
+        </div>
+        <div style="font-size:11px;color:var(--ink-mid);">${totalDone} of ${allTasks.length} tasks completed</div>
+      </div>
+      <div style="display:none;padding:0 14px 14px;border-top:1px solid var(--ink-faint);">`;
+
+    // Day breakdown
+    ['Tue','Wed','Fri'].forEach(dy => {
+      const dayTasks = TASKS.filter(t => t.day === dy);
+      const dayDone = dayTasks.filter(t => (row.checked||{})[key(dy, t.name)]).length;
+      const dayPct = dayTasks.length ? Math.round(dayDone/dayTasks.length*100) : 0;
+      const dayNote = (row.notes||{})[dy] || {};
+      html += `<div style="margin-top:12px;">
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
+          <div style="font-size:12px;font-weight:500;color:var(--ink);">${dy === 'Tue'?'Tuesday':dy==='Wed'?'Wednesday':'Friday'}</div>
+          <div style="font-size:11px;color:var(--ink-mid);">${dayDone}/${dayTasks.length}${dayNote.rating?` · ${'★'.repeat(dayNote.rating)}`:''}</div>
+        </div>`;
+      noteFields.forEach(({k,l}) => {
+        if (dayNote[k]) html += `<div style="font-size:12px;color:var(--ink-mid);margin-top:4px;"><span style="font-weight:500;color:var(--ink);">${l}:</span> ${dayNote[k]}</div>`;
+      });
+      html += `</div>`;
+    });
+
+    html += `</div></div>`;
+  });
+
+  html += `</div>`;
+  el.innerHTML = html;
 }
 
 // ── AI SUMMARY ────────────────────────────────────────────────────────────────
@@ -792,8 +1133,8 @@ function launchConfetti() {
 async function init() {
   await loadFromSupabase();
   document.getElementById('loading-screen').classList.add('hidden');
-  renderStaff();
-  renderOpenClose();
+  renderToday();
+  renderWeeklySummary();
 }
 
 init();
