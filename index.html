@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0">
 <title>Shop tasks</title>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root {
     --clay: #C4714A; --clay-light: #F5EBE4; --clay-dark: #8B4D2F;
@@ -103,7 +104,40 @@
   .crafter-btn:active { background: var(--ink-faint); }
   .crafter-count { font-size: 20px; font-weight: 600; color: var(--ink); min-width: 24px; text-align: center; }
 
-  /* OPEN / CLOSE PANELS */
+  /* BOOKINGS / TABLE PLAN */
+  .bp-slot { margin-bottom: 20px; }
+  .bp-slot-hdr { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--ink-mid); margin-bottom: 8px; display: flex; align-items: center; gap: 8px; }
+  .bp-slot-hdr::after { content: ''; flex: 1; height: 0.5px; background: var(--ink-faint); }
+  .bp-tables { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 8px; }
+  .bp-table { background: #fff; border: 1px solid var(--ink-faint); border-radius: var(--radius); padding: 10px 12px; min-height: 80px; transition: border-color 0.15s; }
+  .bp-table.has-booking { border-color: var(--ink-mid); }
+  .bp-table.drag-over { border-color: var(--clay); background: var(--clay-light); }
+  .bp-table-name { font-size: 10px; font-weight: 600; letter-spacing: 0.06em; text-transform: uppercase; margin-bottom: 6px; }
+  .bp-table-name.main { color: #185FA5; }
+  .bp-table-name.corner { color: #3B6D11; }
+  .bp-table-name.window { color: #B8710A; }
+  .bp-table-name.back { color: #534AB7; }
+  .bp-group { display: flex; align-items: flex-start; gap: 6px; margin-bottom: 5px; padding: 5px 6px; border-radius: var(--radius-sm); cursor: grab; background: var(--ink-faint); user-select: none; }
+  .bp-group:active { cursor: grabbing; }
+  .bp-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; margin-top: 4px; }
+  .bp-dot.main { background: #378ADD; }
+  .bp-dot.corner { background: #639922; }
+  .bp-dot.window { background: #BA7517; }
+  .bp-dot.back { background: #7F77DD; }
+  .bp-dot.unassigned { background: var(--ink-mid); }
+  .bp-name { font-size: 12px; color: var(--ink); line-height: 1.3; }
+  .bp-count { font-size: 10px; color: var(--ink-mid); }
+  .bp-pap { font-size: 10px; font-weight: 500; color: #993C1D; background: #FAECE7; padding: 1px 4px; border-radius: 3px; }
+  .bp-cb { font-size: 10px; font-weight: 500; color: #185FA5; background: #E8F0FB; padding: 1px 4px; border-radius: 3px; }
+  .bp-seats { font-size: 10px; color: var(--ink-mid); margin-top: 6px; padding-top: 5px; border-top: 0.5px solid var(--ink-faint); }
+  .bp-empty { font-size: 12px; color: var(--ink-mid); padding: 4px 0; font-style: italic; }
+  .bp-unassigned { margin-bottom: 16px; }
+  .bp-unassigned-hdr { font-size: 11px; font-weight: 600; letter-spacing: 0.07em; text-transform: uppercase; color: var(--clay-dark); margin-bottom: 6px; }
+  .bp-loading { text-align: center; padding: 40px 16px; color: var(--ink-mid); font-size: 14px; }
+  .bp-summary-bar { display: flex; gap: 6px; margin-bottom: 16px; }
+  .bp-stat { flex: 1; background: var(--ink-faint); border-radius: var(--radius-sm); padding: 8px 10px; }
+  .bp-stat-n { font-size: 18px; font-weight: 600; color: var(--ink); }
+  .bp-stat-l { font-size: 10px; color: var(--ink-mid); }
   .oc-panel { background: #fff; border: 1px solid var(--ink-faint); border-radius: var(--radius); margin-bottom: 14px; overflow: hidden; }
   .oc-header { display: flex; align-items: center; justify-content: space-between; padding: 14px 16px; cursor: pointer; user-select: none; }
   .oc-header-left { display: flex; align-items: center; gap: 10px; }
@@ -174,12 +208,16 @@
 
 <nav class="nav">
   <button class="nav-btn active" onclick="switchView('today')">Today</button>
-  <button class="nav-btn" onclick="switchView('staff')">Week</button>
+  <button class="nav-btn" onclick="switchView('bookings')">Bookings</button>
   <button class="nav-btn" onclick="switchView('manager')">Summary</button>
 </nav>
 
 <div id="today-view" class="view active">
   <div id="today-content"></div>
+</div>
+
+<div id="bookings-view" class="view">
+  <div id="bookings-content"></div>
 </div>
 
 <div id="staff-view" class="view">
@@ -262,34 +300,45 @@ const TASKS = [
 
 const OC_TASKS = {
   opening: [
-    'Unlock and open the front door',
-    'Turn on lights and music',
-    'Check and respond to overnight emails and bookings',
-    'Sync bookings with Class Bento',
-    'Set up craft tables — check supplies are stocked',
-    'Check the bathroom is clean and stocked',
-    'Check front shelf display is tidy',
-    'Water plants if needed',
-    'Note any low stock or issues',
+    'Lights on',
+    'Music on',
+    'Check bookings for today',
+    'Check tables are clean and tidy',
+    'Check front shelves are tidy',
+    'Check bathroom is tidy',
+    'Water jugs filled',
+    'Mugs and cups laid out',
+    'Refill paint brush rack',
+    'Drying rack emptied',
+    'Prop door open',
+    'Sign out',
   ],
   closing: [
-    'Reply to any outstanding booking requests',
-    'Charge craft table lamps',
-    'Tidy and reset craft tables for tomorrow',
-    'Clean tea and coffee station',
-    'Sweep or hoover front room floor',
-    'Empty bins if needed',
-    'Check bathroom is clean',
-    'Turn off lights and music',
-    'Lock up and set alarm',
+    'All washing up done',
+    'Pottery bubble wrapped',
+    'Tables wiped down',
+    'Pen pots on tables organised',
+    'Any mess on the floor tidied up',
+    'Corks off the water jugs',
+    'Take bins out',
+    'Lights off',
+    'Music off',
+    'Bring sign in',
+    'Door locked',
   ]
 };
 
-const DAYS = ['Tue','Wed','Thu','Fri'];
+const DAYS = ['Tue','Wed','Thu','Fri','Sat','Sun'];
+const CATCHUP_DAYS = new Set(['Thu','Sat','Sun']);
+const CATCHUP_SOURCES = {
+  Thu: ['Tue','Wed'],
+  Sat: ['Tue','Wed','Fri'],
+  Sun: ['Tue','Wed','Fri'],
+};
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
 let checked = {};
-let crafters = {Tue:0, Wed:0, Thu:0, Fri:0};
+let crafters = {Tue:0, Wed:0, Thu:0, Fri:0, Sat:0, Sun:0};
 let notes = {};
 let ocChecked = {};
 
@@ -299,6 +348,8 @@ let selectedDay = (()=>{
   if (d===3) return 'Wed';
   if (d===4) return 'Thu';
   if (d===5) return 'Fri';
+  if (d===6) return 'Sat';
+  if (d===0) return 'Sun';
   return 'Wed';
 })();
 
@@ -383,9 +434,10 @@ function isOcComplete(day, type) {
 }
 
 function tasksForDay(day) {
-  if (day !== 'Thu') return TASKS.filter(t => t.day === day);
+  if (!CATCHUP_DAYS.has(day)) return TASKS.filter(t => t.day === day);
+  const sources = CATCHUP_SOURCES[day] || [];
   const leftover = [];
-  ['Tue','Wed'].forEach(src => {
+  sources.forEach(src => {
     TASKS.filter(t => t.day === src).forEach(t => {
       if (!checked[key(src, t.name)]) leftover.push({...t, originalDay: src});
     });
@@ -427,6 +479,19 @@ function changeCrafters(delta) {
   if (el) el.textContent = crafters[selectedDay];
 }
 
+function changeWater(delta) {
+  const k = selectedDay+'_water';
+  const prev = crafters[k] || 0;
+  crafters[k] = Math.max(0, prev + delta);
+  save();
+  const el = document.getElementById('waterCount');
+  if (el) el.textContent = crafters[k];
+  // Confetti at 4 cups
+  if (crafters[k] === 6 && prev < 6) launchConfetti();
+  // Update the overview row text
+  renderToday();
+}
+
 // ── NAVIGATION ────────────────────────────────────────────────────────────────
 function switchView(v) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
@@ -436,24 +501,186 @@ function switchView(v) {
   if (v==='manager') { renderManager(); }
   if (v==='today') { renderToday(); }
   if (v==='staff') { renderWeeklySummary(); }
+  if (v==='bookings') { renderBookings(); }
 }
 
 // ── RENDER: TODAY VIEW ────────────────────────────────────────────────────────
 function renderToday() {
-  const day = selectedDay === 'Thu' ? 'Thu' : selectedDay;
+  const day = selectedDay;
   const dayFullNames = {Tue:'Tuesday', Wed:'Wednesday', Thu:'Thursday', Fri:'Friday', Sat:'Saturday', Sun:'Sunday'};
   const el = document.getElementById('today-content');
   el.innerHTML = '';
 
-  // Day heading
-  const heading = document.createElement('div');
-  heading.style.cssText = 'font-size:22px;font-weight:600;color:var(--ink);margin-bottom:4px;';
-  heading.textContent = dayFullNames[day] || day;
-  el.appendChild(heading);
-  const sub = document.createElement('div');
-  sub.style.cssText = 'font-size:12px;color:var(--ink-mid);margin-bottom:18px;';
-  sub.textContent = new Date().toLocaleDateString('en-GB',{day:'numeric',month:'long',year:'numeric'});
-  el.appendChild(sub);
+  // Day selector tabs
+  const tabsEl = document.createElement('div');
+  tabsEl.style.cssText = 'display:flex;gap:5px;margin-bottom:14px;';
+  DAYS.forEach(d => {
+    const btn = document.createElement('button');
+    const catchupTasks = CATCHUP_DAYS.has(d) ? tasksForDay(d).length : 0;
+    const regularTasks = !CATCHUP_DAYS.has(d) ? TASKS.filter(t=>t.day===d).length : 0;
+    const doneTasks2 = !CATCHUP_DAYS.has(d) ? TASKS.filter(t=>t.day===d&&checked[key(d,t.name)]).length : 0;
+    const allDone = !CATCHUP_DAYS.has(d) && doneTasks2===regularTasks && regularTasks>0;
+    btn.style.cssText = `flex:1;padding:7px 2px;font-size:12px;font-weight:500;border:1.5px solid ${d===selectedDay?'var(--ink)':'var(--ink-faint)'};border-radius:var(--radius-sm);background:${d===selectedDay?'var(--ink)':'var(--white)'};color:${d===selectedDay?'#fff':'var(--ink-mid)'};cursor:pointer;text-align:center;`;
+    const countStr = CATCHUP_DAYS.has(d) ? (catchupTasks>0?catchupTasks+'↩':'✓') : (allDone?'✓':doneTasks2+'/'+regularTasks);
+    btn.innerHTML = `${d}<span style="display:block;font-size:9px;font-weight:400;margin-top:1px;opacity:0.8;">${countStr}</span>`;
+    btn.onclick = () => { selectedDay=d; renderToday(); renderWeeklySummary(); };
+    tabsEl.appendChild(btn);
+  });
+  el.appendChild(tabsEl);
+  const now = new Date();
+  const hour = now.getHours();
+  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
+  const dateStr = now.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long'});
+
+  const morningMessages = [
+    'Hope you have a wonderful day in the shop!',
+    'The shop looks great — let\'s make it even better.',
+    'Another day, another chance to make something beautiful.',
+    'You\'ve got this. Let\'s have a brilliant day.',
+    'Ready to create something lovely today?',
+    'A tidy shop is a happy shop. Let\'s go!',
+  ];
+  const afternoonMessages = [
+    'You\'re doing brilliantly — keep it up!',
+    'Afternoon energy — let\'s power through.',
+    'The shop is in great hands this afternoon.',
+    'Almost there — finish the day strong!',
+  ];
+  const messages = hour < 12 ? morningMessages : afternoonMessages;
+  const message = messages[now.getDate() % messages.length];
+
+  // Task summary counts by type
+  const isCatchup = CATCHUP_DAYS.has(selectedDay);
+  const todayTasks = isCatchup ? [] : TASKS.filter(t => t.day === selectedDay);
+  const totalTasks = todayTasks.length;
+  const doneTasks = todayTasks.filter(t => checked[key(selectedDay, t.name)]).length;
+
+  const typeOrder = {'Pottery delivery':0,'Clean':1,'Organise':2,'Stock count':3,'Garden':4};
+  const typeEmojis = {
+    'Pottery delivery': '🏺',
+    'Clean':            '🧹',
+    'Organise':         '📦',
+    'Stock count':      '📋',
+    'Garden':           '🌿',
+  };
+  const typeColors = {
+    'Pottery delivery': {bg:'#FDF0DC', color:'#B8710A'},
+    'Clean':            {bg:'#E8F0FB', color:'#2A5BA8'},
+    'Organise':         {bg:'#E4F2EB', color:'#2A7A52'},
+    'Stock count':      {bg:'#EEE8FB', color:'#4A3AA8'},
+    'Garden':           {bg:'#FEF9E0', color:'#92700A'},
+  };
+
+  const typeCounts = {};
+  const typeDone = {};
+  todayTasks.forEach(t => {
+    typeCounts[t.type] = (typeCounts[t.type]||0) + 1;
+    if (checked[key(selectedDay, t.name)]) typeDone[t.type] = (typeDone[t.type]||0) + 1;
+  });
+
+  const n = notes[selectedDay] || {};
+  const notesAndRatingDone = !!(n.rating || n.well || n.improve || n.ideas);
+  const ocOpenDone  = isOcComplete(day, 'opening');
+  const ocCloseDone = isOcComplete(day, 'closing');
+  const waterCount  = (crafters[selectedDay+'_water'] || 0);
+  const WATER_GOAL  = 6;
+
+  function typeRowHTML(type, total) {
+    const done = typeDone[type] || 0;
+    const allDone = done === total;
+    const c = typeColors[type] || {bg:'var(--ink-faint)', color:'var(--ink-mid)'};
+    const emoji = typeEmojis[type] || '•';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:15px;line-height:1;">${emoji}</span>
+        <div style="font-size:13px;color:${allDone?'var(--ink-mid)':'var(--ink)'};${allDone?'text-decoration:line-through;':''}">${type}</div>
+      </div>
+      <div style="font-size:12px;color:${allDone?'var(--green)':'var(--ink-mid)'};font-weight:${allDone?'500':'400'};">${allDone?'✓':done+'/'+total}</div>
+    </div>`;
+  }
+  function statusRowHTML(emoji, label, done) {
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
+      <div style="display:flex;align-items:center;gap:8px;">
+        <span style="font-size:15px;line-height:1;">${emoji}</span>
+        <div style="font-size:13px;color:${done?'var(--ink-mid)':'var(--ink)'};${done?'text-decoration:line-through;':''}">${label}</div>
+      </div>
+      <div style="font-size:12px;color:${done?'var(--green)':'var(--ink-mid)'};font-weight:${done?'500':'400'};">${done?'✓':'—'}</div>
+    </div>`;
+  }
+
+  const typeRowsHTML = Object.entries(typeCounts)
+    .sort((a,b) => (typeOrder[a[0]]??99)-(typeOrder[b[0]]??99))
+    .map(([type, count]) => typeRowHTML(type, count))
+    .join('');
+
+  const thuLeftover = isCatchup ? tasksForDay(selectedDay) : [];
+  const catchupSources = (CATCHUP_SOURCES[selectedDay]||[]).join(' & ');
+
+  const catchupLeftoverHTML = isCatchup ? typeRowHTML('↩ Leftover tasks', thuLeftover.length, {bg:'var(--amber-light)',color:'var(--amber)'}, thuLeftover.length) : '';
+
+  const hero = document.createElement('div');
+  hero.style.cssText = 'margin-bottom:16px;';
+  hero.innerHTML = `
+    <div style="margin-bottom:14px;">
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:4px;">${dateStr}</div>
+      <div style="font-size:24px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:6px;">${greeting} 👋</div>
+      <div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">${message}</div>
+    </div>
+    <div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;">
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:13px;font-weight:500;color:var(--ink);">Today's overview</div>
+        ${isCatchup
+          ? `<div style="font-size:12px;color:${thuLeftover.length===0?'var(--green)':'var(--amber)'};">${thuLeftover.length===0?'All clear!':thuLeftover.length+' task'+(thuLeftover.length>1?'s':'')+' left over'}</div>`
+          : `<div style="font-size:12px;color:var(--ink-mid);">${doneTasks}/${totalTasks} done</div>`}
+      </div>
+      ${!isCatchup ? `<div style="background:var(--ink-faint);border-radius:99px;height:4px;overflow:hidden;margin-bottom:12px;">
+        <div style="height:100%;border-radius:99px;background:${progressColor(totalTasks?Math.round(doneTasks/totalTasks*100):0)};width:${totalTasks?Math.round(doneTasks/totalTasks*100):0}%;transition:width 0.4s;"></div>
+      </div>` : ''}
+      ${statusRowHTML('🌅', 'Open', ocOpenDone)}
+      ${isCatchup
+        ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
+            <div style="display:flex;align-items:center;gap:8px;">
+              <span style="font-size:15px;line-height:1;">↩</span>
+              <div style="font-size:13px;color:${thuLeftover.length===0?'var(--ink-mid)':'var(--ink)'};${thuLeftover.length===0?'text-decoration:line-through;':''}">Leftover tasks from ${catchupSources}</div>
+            </div>
+            <div style="font-size:12px;color:${thuLeftover.length===0?'var(--green)':'var(--ink-mid)'};">${thuLeftover.length===0?'✓':''+thuLeftover.length+' left'}</div>
+          </div>`
+        : typeRowsHTML}
+      ${statusRowHTML('🌙', 'Close', ocCloseDone)}
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:15px;line-height:1;">💧</span>
+          <div style="font-size:13px;color:var(--ink);">Drink water</div>
+        </div>
+        <div style="font-size:12px;color:${waterCount>=WATER_GOAL?'var(--green)':'var(--ink-mid)'};">${waterCount>=WATER_GOAL?'✓ Hydrated!':waterCount+'/'+WATER_GOAL+' cups'}</div>
+      </div>
+      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">
+        <div style="display:flex;align-items:center;gap:8px;">
+          <span style="font-size:15px;line-height:1;">⭐</span>
+          <div style="font-size:13px;color:${notesAndRatingDone?'var(--ink-mid)':'var(--ink)'};${notesAndRatingDone?'text-decoration:line-through;':''}">Rating &amp; notes</div>
+        </div>
+        <div style="font-size:12px;color:${notesAndRatingDone?'var(--green)':'var(--ink-mid)'};font-weight:${notesAndRatingDone?'500':'400'};">${notesAndRatingDone?'✓':'—'}</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;margin-bottom:4px;">
+      <div style="flex:1;background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:12px;color:var(--ink-mid);">Crafters</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button onclick="changeCrafters(-1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+          <div id="crafterCount" style="font-size:16px;font-weight:600;min-width:18px;text-align:center;">${crafters[selectedDay]||0}</div>
+          <button onclick="changeCrafters(1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+        </div>
+      </div>
+      <div style="flex:1;background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;">
+        <div style="font-size:12px;color:var(--ink-mid);">💧 Water</div>
+        <div style="display:flex;align-items:center;gap:8px;">
+          <button onclick="changeWater(-1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
+          <div id="waterCount" style="font-size:16px;font-weight:600;min-width:18px;text-align:center;">${waterCount}</div>
+          <button onclick="changeWater(1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
+        </div>
+      </div>
+    </div>`;
+  el.appendChild(hero);
 
   // Helper: build an OC section
   function buildOcSection(type, label, color, dotColor) {
@@ -505,8 +732,8 @@ function renderToday() {
   // Helper: build task section
   function buildTaskSection() {
     const tasks = tasksForDay(selectedDay);
-    const isThursday = selectedDay === 'Thu';
-    const doneCount = isThursday ? 0 : tasks.filter(t => checked[key(t.originalDay||selectedDay, t.name)]).length;
+    const isCatchupDay = CATCHUP_DAYS.has(selectedDay);
+    const doneCount = isCatchupDay ? 0 : tasks.filter(t => checked[key(t.originalDay||selectedDay, t.name)]).length;
     const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 100;
 
     const wrap = document.createElement('div');
@@ -535,7 +762,7 @@ function renderToday() {
     el.appendChild(wrap);
 
     const list = wrap.querySelector('#today-task-list');
-    if (isThursday && tasks.length === 0) {
+    if (isCatchupDay && tasks.length === 0) {
       const e = document.createElement('div');
       e.style.cssText = 'text-align:center;padding:20px;color:var(--ink-mid);font-size:13px;';
       e.textContent = 'Nothing left — great work!';
@@ -548,7 +775,7 @@ function renderToday() {
         sec.textContent = pLabels[p];
         list.appendChild(sec);
         groups[p].forEach(t => {
-          const srcDay = isThursday ? t.originalDay : selectedDay;
+          const srcDay = isCatchupDay ? t.originalDay : selectedDay;
           const k2 = key(srcDay, t.name);
           const isDone = !!checked[k2];
           const card = document.createElement('div');
@@ -588,18 +815,6 @@ function renderToday() {
   }
 
   // Build the page in order
-  // Crafter counter
-  const crafterBar = document.createElement('div');
-  crafterBar.className = 'crafter-bar';
-  crafterBar.innerHTML = `
-    <div class="crafter-label">Crafters today</div>
-    <div class="crafter-controls">
-      <button class="crafter-btn" onclick="changeCrafters(-1)">−</button>
-      <div class="crafter-count" id="crafterCount">${crafters[selectedDay]||0}</div>
-      <button class="crafter-btn" onclick="changeCrafters(1)">+</button>
-    </div>`;
-  el.appendChild(crafterBar);
-
   buildOcSection('opening', 'Opening checklist', 'open', 'var(--green)');
   buildTaskSection();
   buildOcSection('closing', 'Closing checklist', 'close', 'var(--clay)');
@@ -660,33 +875,7 @@ function renderWeeklySummary() {
     'Garden':           {bg:'#FEF9E0', color:'#92700A'},
   };
 
-  // Weekly type summary at the top
-  const allWeekTasks = TASKS.filter(t => t.day !== 'Thu');
-  const weekTypeCounts = {};
-  allWeekTasks.forEach(t => { weekTypeCounts[t.type] = (weekTypeCounts[t.type]||0) + 1; });
-  const weekDone = allWeekTasks.filter(t => checked[key(t.day, t.name)]).length;
-  const weekPct = allWeekTasks.length ? Math.round(weekDone/allWeekTasks.length*100) : 0;
-
-  const summary = document.createElement('div');
-  summary.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 14px;margin-bottom:14px;';
-  const typePills = Object.entries(weekTypeCounts)
-    .sort((a,b) => (typeOrder[a[0]]??99)-(typeOrder[b[0]]??99))
-    .map(([type, count]) => {
-      const c = typeColors[type] || {bg:'var(--ink-faint)', color:'var(--ink-mid)'};
-      return `<span style="font-size:11px;font-weight:500;padding:3px 8px;border-radius:99px;background:${c.bg};color:${c.color};">${count} ${type}</span>`;
-    }).join('');
-  summary.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div style="font-size:13px;font-weight:500;color:var(--ink);">This week</div>
-      <div style="font-size:12px;color:var(--ink-mid);">${weekDone}/${allWeekTasks.length} done</div>
-    </div>
-    <div style="background:var(--ink-faint);border-radius:99px;height:4px;overflow:hidden;margin-bottom:10px;">
-      <div style="height:100%;border-radius:99px;background:${progressColor(weekPct)};width:${weekPct}%;transition:width 0.4s;"></div>
-    </div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;">${typePills}</div>`;
-  el.appendChild(summary);
-
-  // Day cards
+  // Day cards — only scheduled task days (not catch-up days)
   ['Tue','Wed','Fri'].forEach(d => {
     const tasks = TASKS.filter(t => t.day === d);
     const doneCount = tasks.filter(t => checked[key(d, t.name)]).length;
@@ -768,107 +957,112 @@ function renderStaff() {
 // ── RENDER: MANAGER VIEW ──────────────────────────────────────────────────────
 function renderManager() {
   document.getElementById('mgrDate').textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-
-  // Weekly open/close grid
-  const ocWeekEl = document.getElementById('mgrOcWeek');
-  const allDays = ['Tue','Wed','Thu','Fri','Sat','Sun'];
-  let ocWeekHTML = `<div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;">`;
-  [{type:'opening',label:'Opening',dot:'var(--green)'},{type:'closing',label:'Closing',dot:'var(--clay)'}].forEach(({type,label,dot}) => {
-    ocWeekHTML += `<div style="display:flex;align-items:center;gap:6px;margin-bottom:8px;"><div style="width:8px;height:8px;border-radius:50%;background:${dot};flex-shrink:0;"></div><div style="font-size:12px;font-weight:500;color:var(--ink);">${label}</div></div>
-    <div style="display:flex;gap:5px;margin-bottom:12px;">`;
-    allDays.forEach(d => {
-      const complete = isOcComplete(d, type);
-      ocWeekHTML += `<div style="flex:1;text-align:center;">
-        <div style="font-size:10px;color:var(--ink-mid);margin-bottom:3px;">${d}</div>
-        <div style="height:26px;border-radius:5px;background:${complete?'var(--green-light)':'var(--ink-faint)'};display:flex;align-items:center;justify-content:center;font-size:11px;color:${complete?'var(--green)':'var(--ink-mid)'};">${complete?'✓':'–'}</div>
-      </div>`;
-    });
-    ocWeekHTML += `</div>`;
-  });
-  ocWeekHTML += `</div>`;
-  ocWeekEl.innerHTML = ocWeekHTML;
+  document.getElementById('mgrOcWeek').innerHTML = '';
 
   const el = document.getElementById('mgrCards');
   el.innerHTML = '';
-  const dayNames = {Tue:'Tuesday',Wed:'Wednesday',Fri:'Friday'};
 
-  ['Tue','Wed','Thu','Fri'].forEach(d => {
-    if (d==='Thu') {
-      const leftover = tasksForDay('Thu');
+  const dayNames = {Tue:'Tuesday', Wed:'Wednesday', Fri:'Friday', Sat:'Saturday', Sun:'Sunday'};
+  const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas and shopping list'}];
+
+  ['Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d => {
+    // Catch-up days (Thu, Sat, Sun)
+    if (CATCHUP_DAYS.has(d)) {
+      const leftover = tasksForDay(d);
+      const crafterCount = crafters[d]||0;
+      const rating = (notes[d]||{}).rating||0;
+      const dayNotes = notes[d]||{};
+      const hasNotes = noteFields.some(f=>dayNotes[f.key]);
+      const catchupName = {Thu:'Thursday catch-up', Sat:'Saturday', Sun:'Sunday'}[d];
       const card = document.createElement('div');
-      card.className = 'day-card'+(leftover.length===0?' all-done':'');
-      const crafterCount = crafters['Thu']||0;
+      card.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;';
       card.innerHTML = `
-        <div class="day-card-head"><div class="day-card-name">Thursday catch-up</div><div class="day-card-pct">${leftover.length===0?'✓':leftover.length+' left'}</div></div>
-        <div class="day-card-bar-wrap"><div class="day-card-bar" style="width:${leftover.length===0?100:0}%"></div></div>
-        <div class="day-card-detail">${leftover.length===0?'All tasks complete from Tue & Wed':leftover.length+' task'+(leftover.length>1?'s':'')+' not yet done from Tue/Wed'}</div>
-        <div class="crafter-summary"><span class="crafter-pill">${crafterCount} crafter${crafterCount!==1?'s':''}</span></div>`;
-      el.appendChild(card); return;
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+          <div style="font-size:15px;font-weight:500;color:var(--ink);">${catchupName}</div>
+          <div style="display:flex;align-items:center;gap:6px;">
+            ${rating?`<span style="color:#F5C842;font-size:14px;letter-spacing:-1px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</span>`:''}
+            <span style="font-size:12px;font-weight:500;color:${leftover.length===0?'var(--green)':'var(--amber)'};">${leftover.length===0?'All clear':''+leftover.length+' left'}</span>
+          </div>
+        </div>
+        <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:${hasNotes?'10px':'0'};">
+          <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${leftover.length===0?'var(--green-light)':'var(--amber-light)'};color:${leftover.length===0?'var(--green)':'var(--amber)'};">${leftover.length===0?'✓ Nothing left over':`${leftover.length} task${leftover.length>1?'s':''} not done`}</span>
+          <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:var(--ink-faint);color:var(--ink-mid);">👥 ${crafterCount} crafter${crafterCount!==1?'s':''}</span>
+        </div>
+        ${hasNotes?`<div style="border-top:1px solid var(--ink-faint);padding-top:10px;">${noteFields.filter(f=>dayNotes[f.key]).map(f=>`<div style="margin-bottom:7px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:3px;">${f.label}</div><div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes[f.key]}</div></div>`).join('')}</div>`:''}`;
+      el.appendChild(card);
+      return;
+    }
+    const tasks = TASKS.filter(t => t.day === d);
+    const p0Tasks = tasks.filter(t => t.priority === 'P0');
+    const doneCount = tasks.filter(t => checked[key(d,t.name)]).length;
+    const p0Done = p0Tasks.filter(t => checked[key(d,t.name)]).length;
+    const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
+    const allMusts = p0Done === p0Tasks.length;
+    const ocOpen = isOcComplete(d,'opening');
+    const ocClose = isOcComplete(d,'closing');
+    const crafterCount = crafters[d] || 0;
+    const rating = (notes[d]||{}).rating || 0;
+    const dayNotes = notes[d] || {};
+
+    // Outstanding must-dos
+    const outstanding = p0Tasks.filter(t => !checked[key(d,t.name)]);
+    const isToday = d===selectedDay || (CATCHUP_DAYS.has(selectedDay) && (CATCHUP_SOURCES[selectedDay]||[]).includes(d));
+
+    function statusPill(done, trueLabel, falseLabel) {
+      return `<span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${done?'var(--green-light)':'#FAECE7'};color:${done?'var(--green)':'#993C1D'};">${done?trueLabel:falseLabel}</span>`;
     }
 
-    const tasks = TASKS.filter(t => t.day===d);
-    const doneCount = tasks.filter(t => checked[key(d,t.name)]).length;
-    const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
-    const allDone = doneCount===tasks.length && tasks.length>0;
-    const crafterCount = crafters[d]||0;
-    const ocOpenDone = isOcComplete(d,'opening');
-    const ocCloseDone = isOcComplete(d,'closing');
-    const outstanding = tasks.filter(t => t.priority==='P0' && !checked[key(d,t.name)]);
-    const isToday = d===selectedDay || (selectedDay==='Thu' && (d==='Tue'||d==='Wed'));
-    const outstandingHTML = outstanding.length>0
-      ? `<div class="outstanding-section">
-          <div class="outstanding-label" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';">
-            Outstanding must-do <span style="font-size:10px;opacity:0.6;">${outstanding.length} task${outstanding.length>1?'s':''} ▾</span>
-          </div>
-          <div style="display:${isToday?'block':'none'}">${outstanding.map(t=>`<div class="outstanding-task">${t.name}</div>`).join('')}</div>
-        </div>` : '';
-
     const card = document.createElement('div');
-    card.className = 'day-card'+(allDone?' all-done':'');
+    card.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:14px 16px;margin-bottom:10px;';
+
+    // Has any notes
+    const hasNotes = noteFields.some(f => dayNotes[f.key]);
+
     card.innerHTML = `
-      <div class="day-card-head"><div class="day-card-name">${dayNames[d]}</div><div class="day-card-pct">${pct}%</div></div>
-      <div class="day-card-bar-wrap"><div class="day-card-bar" style="width:${pct}%;background:${progressColor(pct)}"></div></div>
-      <div class="day-card-detail">${doneCount} of ${tasks.length} tasks done${allDone?' · All complete!':''}</div>
-      <div class="crafter-summary">
-        <span class="crafter-pill">${crafterCount} crafter${crafterCount!==1?'s':''}</span>
-        <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${ocOpenDone?'var(--green-light)':'var(--ink-faint)'};color:${ocOpenDone?'var(--green)':'var(--ink-mid)'};">${ocOpenDone?'✓':'-'} Opening</span>
-        <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:${ocCloseDone?'var(--green-light)':'var(--ink-faint)'};color:${ocCloseDone?'var(--green)':'var(--ink-mid)'};">${ocCloseDone?'✓':'-'} Closing</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;">
+        <div style="font-size:15px;font-weight:500;color:var(--ink);">${dayNames[d]}</div>
+        <div style="display:flex;align-items:center;gap:6px;">
+          ${rating ? `<span style="color:#F5C842;font-size:14px;letter-spacing:-1px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</span>` : ''}
+          <span style="font-size:13px;font-weight:500;color:${pct===100?'var(--green)':'var(--ink-mid)'};">${pct}%</span>
+        </div>
       </div>
-      ${outstandingHTML}`;
+
+      <div style="background:var(--ink-faint);border-radius:99px;height:5px;overflow:hidden;margin-bottom:10px;">
+        <div style="height:100%;border-radius:99px;background:${progressColor(pct)};width:${pct}%;transition:width 0.4s;"></div>
+      </div>
+
+      <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:10px;">
+        ${statusPill(ocOpen, '✓ Opened', '✗ Not opened')}
+        ${statusPill(ocClose, '✓ Closed', '✗ Not closed')}
+        ${statusPill(allMusts, '✓ Must-dos done', `${p0Tasks.length - p0Done} must-do${p0Tasks.length-p0Done>1?'s':''} missed`)}
+        <span style="font-size:11px;font-weight:500;padding:2px 8px;border-radius:99px;background:var(--ink-faint);color:var(--ink-mid);">👥 ${crafterCount} crafter${crafterCount!==1?'s':''}</span>
+      </div>
+
+      ${outstanding.length > 0 ? `
+        <div style="margin-bottom:10px;">
+          <div style="font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:#993C1D;margin-bottom:5px;cursor:pointer;display:flex;justify-content:space-between;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none';">
+            Missed must-dos <span style="opacity:0.6;">${outstanding.length} ▾</span>
+          </div>
+          <div style="display:${isToday?'block':'none'}">
+            ${outstanding.map(t=>`<div style="font-size:12px;color:#993C1D;background:#FAECE7;border-radius:var(--radius-sm);padding:4px 8px;margin-bottom:3px;">${t.name}</div>`).join('')}
+          </div>
+        </div>` : ''}
+
+      ${hasNotes ? `
+        <div style="border-top:1px solid var(--ink-faint);padding-top:10px;">
+          ${noteFields.filter(f=>dayNotes[f.key]).map(f=>`
+            <div style="margin-bottom:7px;">
+              <div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:3px;">${f.label}</div>
+              <div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes[f.key]}</div>
+            </div>`).join('')}
+        </div>` : ''}`;
+
     el.appendChild(card);
   });
 
-  // Weekly notes summary
-  const notesDays = ['Tue','Wed','Thu','Fri'];
+  // Notes summary and AI button
   const notesEl = document.getElementById('mgrNotesSummary');
-  const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas and shopping list'}];
-  const hasAnyNotes = notesDays.some(d => noteFields.some(f=>(notes[d]||{})[f.key]) || (notes[d]||{}).rating);
-
-  if (!hasAnyNotes) { notesEl.innerHTML = ''; }
-  else {
-    let html = `<div class="notes-summary-card"><div class="notes-summary-title">Weekly notes</div>`;
-    const ratingDays = notesDays.filter(d => (notes[d]||{}).rating);
-    if (ratingDays.length) {
-      html += `<div class="notes-summary-section"><div class="notes-summary-label">Day ratings</div><div style="display:flex;gap:10px;flex-wrap:wrap;">`;
-      ratingDays.forEach(d => {
-        const r = notes[d].rating;
-        html += `<div class="notes-summary-entry" style="display:flex;align-items:center;gap:6px;padding:4px 10px;">
-          <span style="font-size:11px;font-weight:600;color:var(--ink-mid);text-transform:uppercase;letter-spacing:0.05em;">${d}</span>
-          <span style="color:#F5C842;font-size:14px;">${'★'.repeat(r)}${'☆'.repeat(5-r)}</span>
-        </div>`;
-      });
-      html += `</div></div>`;
-    }
-    noteFields.forEach(({key,label}) => {
-      const entries = notesDays.map(d=>({day:d,text:(notes[d]||{})[key]})).filter(e=>e.text);
-      if (!entries.length) return;
-      html += `<div class="notes-summary-section"><div class="notes-summary-label">${label}</div>
-        ${entries.map(e=>`<div class="notes-summary-entry"><div class="notes-summary-entry-day">${e.day}</div><div>${e.text}</div></div>`).join('')}
-      </div>`;
-    });
-    html += `</div>`;
-    notesEl.innerHTML = html;
-  }
+  notesEl.innerHTML = '';
 
   document.getElementById('mgrAiSummary').innerHTML =
     `<button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Summarise the week with AI</button>`;
@@ -940,7 +1134,7 @@ function resetOc(type) {
 // ── RESET ALL ─────────────────────────────────────────────────────────────────
 function resetAll() {
   if (!confirm('Reset all tasks, crafter counts and notes for the week? This cannot be undone.')) return;
-  checked={}; crafters={Tue:0,Wed:0,Thu:0,Fri:0}; notes={}; ocChecked={};
+  checked={}; crafters={Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0,Tue_water:0,Wed_water:0,Thu_water:0,Fri_water:0,Sat_water:0,Sun_water:0}; notes={}; ocChecked={};
   save(); renderStaff(); renderManager();
 }
 
@@ -1128,6 +1322,304 @@ function launchConfetti() {
   }
   if (frame) cancelAnimationFrame(frame); draw();
 }
+
+// ── BOOKINGS & TABLE PLAN ────────────────────────────────────────────────────
+const TABLES = [
+  {id:'main',   name:'Main table',   cap:'8–10', maxSeats:10, color:'main'},
+  {id:'corner', name:'Corner table', cap:'6',    maxSeats:6,  color:'corner'},
+  {id:'window', name:'Window table', cap:'6',    maxSeats:6,  color:'window'},
+  {id:'back',   name:'Back table',   cap:'8–10', maxSeats:10, color:'back'},
+];
+
+const GCAL_CLIENT_ID = '564490971689-2qjh44r2oin0cs5idr7no0grrcpsks2o.apps.googleusercontent.com';
+const GCAL_SCOPES = 'https://www.googleapis.com/auth/calendar.readonly';
+const GCAL_ID = 'imogen@craft-and-soul.com';
+
+let gcalToken = null;
+let tableAssignments = {};
+let cachedBookingGroups = null;
+let dragState = null;
+
+function parseBookings(events) {
+  const sessionEvents = events.filter(e => {
+    const s = e.summary || '';
+    if (s.startsWith('[CB]')) return false;
+    return true;
+  });
+  const groupMap = {};
+  sessionEvents.forEach(e => {
+    const raw = e.summary || '';
+    const nameMatch = raw.match(/^(.+?):/);
+    if (!nameMatch) return;
+    let name = nameMatch[1].trim();
+    const isPAP = /PAP/i.test(name) || /paint.a.pot/i.test(raw);
+    const isCB = /class.?bento/i.test(name) || /classbento/i.test(e.creator?.email||'');
+    const typeMatch = raw.match(/\(([^)]+)\)$/);
+    const sessionType = typeMatch ? typeMatch[1] : '';
+    const isClass = sessionType === 'Classes' || /watercolour|clay|embroidery/i.test(raw);
+    name = name.replace(/\s*PAP\s*/gi,'').replace(/\s*Class\s*Bento\s*/gi,'').replace(/\s*CLAY\s*/gi,'').trim();
+    const startTime = e.start?.dateTime || '';
+    const endTime = e.end?.dateTime || '';
+    const gKey = name + '|' + startTime;
+    if (!groupMap[gKey]) {
+      groupMap[gKey] = {name, startTime, endTime, count:0, isPAP, isCB, isClass, sessionType, key:gKey};
+    }
+    groupMap[gKey].count++;
+  });
+  return Object.values(groupMap).sort((a,b) => a.startTime.localeCompare(b.startTime));
+}
+
+function formatTime(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  const h = d.getHours(), m = d.getMinutes();
+  const ampm = h >= 12 ? 'pm' : 'am';
+  const hh = h % 12 || 12;
+  return `${hh}${m ? ':'+String(m).padStart(2,'0') : ''} ${ampm}`;
+}
+
+function formatDateShort(iso) {
+  const d = new Date(iso);
+  return d.toLocaleDateString('en-GB',{weekday:'short', day:'numeric', month:'short'});
+}
+
+function slotKey(group) { return group.startTime+'|'+group.endTime; }
+function getAssignment(slotK, groupKey) { return (tableAssignments[slotK]||{})[groupKey]||null; }
+function setAssignment(slotK, groupKey, tableId) {
+  if (!tableAssignments[slotK]) tableAssignments[slotK] = {};
+  if (tableId===null) delete tableAssignments[slotK][groupKey];
+  else tableAssignments[slotK][groupKey] = tableId;
+}
+
+function autoAssign(groups) {
+  const slots = {};
+  groups.forEach(g => { const sk=slotKey(g); if(!slots[sk]) slots[sk]=[]; slots[sk].push(g); });
+  Object.entries(slots).forEach(([sk, slotGroups]) => {
+    const taken = new Set(Object.values(tableAssignments[sk]||{}));
+    slotGroups.forEach(g => {
+      if (getAssignment(sk, g.key)) return;
+      const free = TABLES.find(t => !taken.has(t.id));
+      if (free) { setAssignment(sk, g.key, free.id); taken.add(free.id); }
+    });
+  });
+}
+
+function gcalSignIn() {
+  if (GCAL_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID') {
+    renderBookingSetup();
+    return;
+  }
+  const client = google.accounts.oauth2.initTokenClient({
+    client_id: GCAL_CLIENT_ID,
+    scope: GCAL_SCOPES,
+    callback: (tokenResponse) => {
+      gcalToken = tokenResponse.access_token;
+      localStorage.setItem('gcal_token', gcalToken);
+      fetchAndRenderBookings();
+    },
+  });
+  client.requestAccessToken();
+}
+
+async function fetchAndRenderBookings() {
+  const el = document.getElementById('bookings-content');
+  el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);font-size:14px;">Loading bookings…</div>`;
+
+  const now = new Date();
+  const start = new Date(now); start.setHours(0,0,0,0);
+  const end = new Date(now); end.setDate(end.getDate()+7); end.setHours(23,59,59,999);
+
+  const params = new URLSearchParams({
+    calendarId: GCAL_ID,
+    timeMin: start.toISOString(),
+    timeMax: end.toISOString(),
+    singleEvents: 'true',
+    orderBy: 'startTime',
+    maxResults: '250',
+  });
+
+  try {
+    const res = await fetch(`https://www.googleapis.com/calendar/v3/calendars/${encodeURIComponent(GCAL_ID)}/events?${params}`, {
+      headers: { Authorization: `Bearer ${gcalToken}` }
+    });
+    if (res.status === 401) {
+      gcalToken = null;
+      localStorage.removeItem('gcal_token');
+      renderBookings();
+      return;
+    }
+    const data = await res.json();
+    const groups = parseBookings(data.items || []);
+    cachedBookingGroups = groups;
+    autoAssign(groups);
+    renderBookingPlan(groups);
+  } catch(err) {
+    el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);font-size:14px;">Could not load bookings. Please try again.</div>
+      <button class="reset-btn" onclick="renderBookings()">Retry</button>`;
+  }
+}
+
+async function renderBookings() {
+  const el = document.getElementById('bookings-content');
+
+  if (GCAL_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID') {
+    renderBookingSetup();
+    return;
+  }
+
+  // Try cached token first
+  const stored = localStorage.getItem('gcal_token');
+  if (stored) { gcalToken = stored; fetchAndRenderBookings(); return; }
+
+  // Show sign in
+  el.innerHTML = `
+    <div style="text-align:center;padding:40px 16px;">
+      <div style="font-size:18px;font-weight:500;color:var(--ink);margin-bottom:8px;">Connect Google Calendar</div>
+      <div style="font-size:14px;color:var(--ink-mid);margin-bottom:24px;">Sign in to see today's bookings and build your table plan.</div>
+      <button class="ai-summary-btn" style="max-width:260px;margin:0 auto;" onclick="gcalSignIn()">Sign in with Google</button>
+    </div>`;
+}
+
+function renderBookingSetup() {
+  const el = document.getElementById('bookings-content');
+  el.innerHTML = `
+    <div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:16px;">
+      <div style="font-size:15px;font-weight:500;color:var(--ink);margin-bottom:12px;">Set up Google Calendar</div>
+      <div style="font-size:13px;color:var(--ink-mid);line-height:1.6;margin-bottom:12px;">
+        To connect your calendar, you need a free Google Cloud OAuth Client ID. Follow these steps:
+      </div>
+      <div style="font-size:13px;color:var(--ink);line-height:1.8;">
+        <div style="margin-bottom:8px;"><span style="background:var(--ink);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;margin-right:6px;">1</span>Go to <strong>console.cloud.google.com</strong></div>
+        <div style="margin-bottom:8px;"><span style="background:var(--ink);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;margin-right:6px;">2</span>Create a new project — name it <em>Shop Checklist</em></div>
+        <div style="margin-bottom:8px;"><span style="background:var(--ink);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;margin-right:6px;">3</span>Go to <strong>APIs & Services → Enable APIs</strong> → enable <em>Google Calendar API</em></div>
+        <div style="margin-bottom:8px;"><span style="background:var(--ink);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;margin-right:6px;">4</span>Go to <strong>Credentials → Create credentials → OAuth client ID</strong></div>
+        <div style="margin-bottom:8px;"><span style="background:var(--ink);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;margin-right:6px;">5</span>Choose <em>Web application</em> — add your GitHub Pages URL as an <strong>Authorised JavaScript origin</strong></div>
+        <div style="margin-bottom:12px;"><span style="background:var(--ink);color:#fff;border-radius:50%;width:18px;height:18px;display:inline-flex;align-items:center;justify-content:center;font-size:10px;font-weight:500;margin-right:6px;">6</span>Copy the <strong>Client ID</strong> — it ends in <em>.apps.googleusercontent.com</em></div>
+      </div>
+      <div style="font-size:13px;color:var(--ink-mid);">Then in your <code>shop-checklist.html</code> file, find:<br>
+        <code style="background:var(--ink-faint);padding:2px 6px;border-radius:4px;font-size:12px;">const GCAL_CLIENT_ID = 'YOUR_GOOGLE_CLIENT_ID';</code><br>
+        and replace <code>YOUR_GOOGLE_CLIENT_ID</code> with your Client ID.
+      </div>
+    </div>`;
+}
+
+function renderBookingPlan(groups) {
+  const el = document.getElementById('bookings-content');
+  el.innerHTML = '';
+
+  if (!groups || !groups.length) {
+    el.innerHTML = `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);">No bookings in the next 7 days.</div>`;
+    return;
+  }
+
+  // Group by date then slot
+  const byDate = {};
+  groups.forEach(g => {
+    const dateKey = g.startTime.split('T')[0];
+    if (!byDate[dateKey]) byDate[dateKey] = {};
+    const sk = slotKey(g);
+    if (!byDate[dateKey][sk]) byDate[dateKey][sk] = {startTime:g.startTime, endTime:g.endTime, groups:[]};
+    byDate[dateKey][sk].groups.push(g);
+  });
+
+  const totalCrafters = groups.reduce((s,g)=>s+g.count,0);
+  const summaryBar = document.createElement('div');
+  summaryBar.className = 'bp-summary-bar';
+  summaryBar.style.marginBottom = '16px';
+  summaryBar.innerHTML = `
+    <div class="bp-stat"><div class="bp-stat-n">${groups.length}</div><div class="bp-stat-l">Groups</div></div>
+    <div class="bp-stat"><div class="bp-stat-n">${totalCrafters}</div><div class="bp-stat-l">Crafters</div></div>
+    <div class="bp-stat"><div class="bp-stat-n">${Object.keys(byDate).length}</div><div class="bp-stat-l">Days</div></div>`;
+  el.appendChild(summaryBar);
+
+  Object.entries(byDate).sort().forEach(([dateKey, slots]) => {
+    // Date header
+    const dateHdr = document.createElement('div');
+    const isToday = dateKey === new Date().toISOString().split('T')[0];
+    dateHdr.style.cssText = `font-size:14px;font-weight:500;color:var(--ink);margin:16px 0 10px;padding-bottom:6px;border-bottom:1.5px solid ${isToday?'var(--clay)':'var(--ink-faint)'};`;
+    dateHdr.textContent = isToday ? `Today — ${formatDateShort(dateKey+'T00:00:00')}` : formatDateShort(dateKey+'T00:00:00');
+    el.appendChild(dateHdr);
+
+    Object.entries(slots).forEach(([sk, slot]) => {
+      const slotEl = document.createElement('div');
+      slotEl.className = 'bp-slot';
+      const slotCrafters = slot.groups.reduce((s,g)=>s+g.count,0);
+      slotEl.innerHTML = `<div class="bp-slot-hdr">${formatTime(slot.startTime)} – ${formatTime(slot.endTime)} <span style="font-weight:400;">${slotCrafters} crafter${slotCrafters!==1?'s':''}</span></div>`;
+
+      const tablesGrid = document.createElement('div');
+      tablesGrid.className = 'bp-tables';
+
+      TABLES.forEach(table => {
+        const assigned = slot.groups.filter(g => getAssignment(sk,g.key)===table.id);
+        const seatsUsed = assigned.reduce((s,g)=>s+g.count,0);
+        const seatsLeft = table.maxSeats - seatsUsed;
+        const card = document.createElement('div');
+        card.className = `bp-table${assigned.length?' has-booking':''}`;
+        card.dataset.tableId = table.id;
+        card.dataset.slotKey = sk;
+        card.addEventListener('dragover', e=>{e.preventDefault();card.classList.add('drag-over');});
+        card.addEventListener('dragleave', ()=>card.classList.remove('drag-over'));
+        card.addEventListener('drop', e=>{
+          e.preventDefault(); card.classList.remove('drag-over');
+          if (dragState) { setAssignment(dragState.slotKey, dragState.groupKey, table.id); renderBookingPlan(cachedBookingGroups); }
+        });
+
+        let html = `<div class="bp-table-name ${table.color}">${table.name} <span style="font-weight:400;color:var(--ink-mid);font-size:9px;">${table.cap}</span></div>`;
+        if (assigned.length) {
+          assigned.forEach(g => {
+            const pap = g.isPAP ? `<span class="bp-pap">PAP</span> ` : '';
+            const cb = g.isCB ? `<span class="bp-cb">CB</span> ` : '';
+            const cls = g.isClass && !g.isPAP ? `<span class="bp-cb">${g.sessionType}</span> ` : '';
+            html += `<div class="bp-group" draggable="true" data-group-key="${g.key.replace(/["|]/g,'_')}" data-slot-key="${sk}">
+              <div class="bp-dot ${table.color}"></div>
+              <div><div class="bp-name">${g.name}</div>
+              <div style="display:flex;gap:3px;margin-top:2px;flex-wrap:wrap;">${pap}${cb}${cls}<span class="bp-count">${g.count} seat${g.count!==1?'s':''}</span></div></div>
+            </div>`;
+          });
+          html += `<div class="bp-seats">${seatsLeft} free of ${table.maxSeats}</div>`;
+        } else {
+          html += `<div class="bp-empty">Empty</div>`;
+        }
+        card.innerHTML = html;
+        card.querySelectorAll('.bp-group[draggable]').forEach(chip => {
+          chip.addEventListener('dragstart', e=>{
+            dragState={groupKey:chip.dataset.groupKey, slotKey:chip.dataset.slotKey};
+            e.dataTransfer.effectAllowed='move';
+          });
+          chip.addEventListener('dragend',()=>{dragState=null;});
+        });
+        tablesGrid.appendChild(card);
+      });
+
+      const unassigned = slot.groups.filter(g=>!getAssignment(sk,g.key));
+      if (unassigned.length) {
+        const unEl=document.createElement('div');
+        unEl.style.cssText='grid-column:1/-1;';
+        unEl.innerHTML=`<div class="bp-unassigned-hdr">Unassigned — drag to a table</div>`;
+        unassigned.forEach(g=>{
+          const pap=g.isPAP?`<span class="bp-pap">PAP</span> `:'';
+          const cb=g.isCB?`<span class="bp-cb">CB</span> `:'';
+          unEl.innerHTML+=`<div class="bp-group" draggable="true" data-group-key="${g.key.replace(/["|]/g,'_')}" data-slot-key="${sk}" style="background:var(--clay-light);">
+            <div class="bp-dot unassigned"></div>
+            <div><div class="bp-name">${g.name}</div><div style="display:flex;gap:3px;margin-top:2px;">${pap}${cb}<span class="bp-count">${g.count} seat${g.count!==1?'s':''}</span></div></div>
+          </div>`;
+        });
+        tablesGrid.appendChild(unEl);
+      }
+
+      slotEl.appendChild(tablesGrid);
+      el.appendChild(slotEl);
+    });
+  });
+
+  const btns = document.createElement('div');
+  btns.style.cssText='display:flex;gap:8px;margin-top:12px;';
+  btns.innerHTML=`
+    <button class="reset-btn" style="flex:1;" onclick="tableAssignments={};fetchAndRenderBookings();">Refresh</button>
+    <button class="reset-btn" style="flex:1;" onclick="gcalToken=null;localStorage.removeItem('gcal_token');renderBookings();">Sign out</button>`;
+  el.appendChild(btns);
+}
+
 
 // ── INIT ──────────────────────────────────────────────────────────────────────
 async function init() {
