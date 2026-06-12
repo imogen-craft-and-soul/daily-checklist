@@ -765,20 +765,22 @@ function renderToday() {
     const pct = Math.round(done/tasks.length*100);
     const allDone = done === tasks.length;
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
+    const sectionBg = type === 'opening' ? '#FFFDF0' : '#F0F5FF';
+    const dotCol    = type === 'opening' ? '#D4AA00' : '#6B8FD4';
+    wrap.style.cssText = `background:${sectionBg};border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;`;
     const statusBadge = allDone
       ? `<span style="font-size:12px;font-weight:500;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:99px;">✓ Complete</span>`
       : `<span style="font-size:12px;color:var(--ink-mid);">${done}/${tasks.length}</span>`;
     wrap.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;" onclick="this.closest('[data-oc]').classList.toggle('exp-oc')">
         <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:9px;height:9px;border-radius:50%;background:${dotColor};flex-shrink:0;"></div>
+          <div style="width:9px;height:9px;border-radius:50%;background:${dotCol};flex-shrink:0;"></div>
           <div style="font-size:14px;font-weight:500;color:var(--ink);">${label}</div>
         </div>
         <div style="display:flex;align-items:center;gap:8px;">${statusBadge}<span style="font-size:11px;color:var(--ink-mid);transition:transform 0.2s;" class="oc-chev-today">▼</span></div>
       </div>
-      <div class="oc-body-today" style="display:${allDone?'none':'block'};padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
-        <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:8px 0 4px;overflow:hidden;"><div style="height:100%;border-radius:99px;background:${dotColor};width:${pct}%;"></div></div>
+      <div class="oc-body-today" style="display:${allDone?'none': type==='closing' ? 'none' : 'block'};padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
+        <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:8px 0 4px;overflow:hidden;"><div style="height:100%;border-radius:99px;background:${dotCol};width:${pct}%;"></div></div>
         <div style="font-size:11px;color:var(--ink-mid);margin-bottom:8px;">${done} of ${tasks.length} done</div>
         <div id="today-oc-${type}"></div>
       </div>`;
@@ -823,7 +825,7 @@ function renderToday() {
     const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 100;
 
     const wrap = document.createElement('div');
-    wrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
+    wrap.style.cssText = 'background:#F0FAF3;border:1px solid #C0E8CC;border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
 
     const groups = {P0:[],P1:[],P2:[]};
     tasks.forEach(t => groups[t.priority].push(t));
@@ -831,6 +833,9 @@ function renderToday() {
     const sortGroup = arr => arr.sort((a,b)=>{const s=(a.sortOrder??99)-(b.sortOrder??99);return s!==0?s:(typeOrder[a.type]??99)-(typeOrder[b.type]??99);});
     ['P0','P1','P2'].forEach(p=>sortGroup(groups[p]));
     const pLabels = {P0:'Must do',P1:'Important',P2:'Last up'};
+    const pBg     = {P0:'#F0FAF3', P1:'#F6FCF0', P2:'#F8F8F8'};
+    const pBorder = {P0:'#C0E8CC', P1:'#D4EEB8', P2:'#E0E0E0'};
+    const pHeader = {P0:'#2A7A52', P1:'#4A8A2A', P2:'var(--ink-mid)'};
 
     wrap.innerHTML = `
       <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayTasks(this)">
@@ -856,10 +861,12 @@ function renderToday() {
     } else {
       ['P0','P1','P2'].forEach(p => {
         if (!groups[p].length) return;
+
         const sec = document.createElement('div');
         sec.className = 'section-head';
         sec.textContent = pLabels[p];
         list.appendChild(sec);
+
         groups[p].forEach(t => {
           const srcDay = isCatchupDay ? t.originalDay : selectedDay;
           const k2 = key(srcDay, t.name);
@@ -881,10 +888,15 @@ function renderToday() {
       ['P0','P1','P2'].forEach(p => {
         const group = dayCustom.filter(t => t.priority === p);
         if (!group.length) return;
+
+        const groupWrap = document.createElement('div');
+        groupWrap.style.cssText = `background:${pBg[p]};border:1px solid ${pBorder[p]};border-radius:var(--radius-sm);margin-bottom:8px;overflow:hidden;`;
+
         const sec = document.createElement('div');
         sec.className = 'section-head';
         sec.textContent = pLabels2[p] + ' (added)';
         list.appendChild(sec);
+
         group.forEach(t => {
           const card = document.createElement('div');
           card.className = 'task' + (t.done ? ' done' : '');
@@ -918,10 +930,10 @@ function renderToday() {
     const btnRow = document.createElement('div');
     btnRow.style.cssText = 'display:flex;gap:6px;';
 
-    const priorities = [{p:'P0',label:'Must do',color:'var(--clay)'},{p:'P1',label:'Important',color:'var(--amber)'},{p:'P2',label:'Last up',color:'var(--blue)'}];
-    priorities.forEach(({p, label, color}) => {
+    const priorities = [{p:'P0',label:'Must do'},{p:'P1',label:'Important'},{p:'P2',label:'Last up'}];
+    priorities.forEach(({p, label}) => {
       const btn = document.createElement('button');
-      btn.style.cssText = `flex:1;padding:7px 4px;font-size:11px;font-weight:500;border:1.5px solid ${color};border-radius:var(--radius-sm);background:#fff;color:${color};cursor:pointer;`;
+      btn.style.cssText = `flex:1;padding:7px 4px;font-size:11px;font-weight:500;border:1.5px solid var(--ink-faint);border-radius:var(--radius-sm);background:#fff;color:var(--ink-mid);cursor:pointer;`;
       btn.textContent = label;
       btn.onclick = () => addCustomTask(selectedDay, input.value, p);
       btnRow.appendChild(btn);
@@ -1499,6 +1511,7 @@ const GCAL_ID = 'imogen@craft-and-soul.com';
 let gcalToken = null;
 let tableAssignments = {};
 let cachedBookingGroups = null;
+let selectedBookingDate = new Date().toISOString().split('T')[0];
 let dragState = null;
 
 function parseBookings(events) {
@@ -1650,16 +1663,47 @@ function renderBookingPlan(groups) {
   }
   function toMins(iso) { if(!iso) return 0; const d=new Date(iso); return d.getHours()*60+d.getMinutes(); }
 
+  // ── Day tabs ──────────────────────────────────────────────────────────────
+  // Get unique dates from cached groups, sorted
+  const availableDates = [...new Set((groups||[]).map(g => g.startTime.split('T')[0]))].sort();
+  // Always include today even if no bookings
+  const todayKey = new Date().toISOString().split('T')[0];
+  if (!availableDates.includes(todayKey)) availableDates.unshift(todayKey);
+
+  // Build tab strip
+  const tabsEl = document.createElement('div');
+  tabsEl.style.cssText = 'display:flex;gap:5px;margin-bottom:14px;overflow-x:auto;-webkit-overflow-scrolling:touch;';
+  availableDates.forEach(dk => {
+    const d = new Date(dk + 'T12:00:00');
+    const isToday = dk === todayKey;
+    const isSelected = dk === selectedBookingDate;
+    const dayLabel = isToday ? 'Today' : d.toLocaleDateString('en-GB',{weekday:'short'});
+    const dateLabel = d.toLocaleDateString('en-GB',{day:'numeric',month:'short'});
+    const dayCount = (groups||[]).filter(g=>g.startTime.startsWith(dk)).reduce((s,g)=>s+g.count,0);
+    const btn = document.createElement('button');
+    btn.style.cssText = `flex-shrink:0;padding:7px 10px;font-size:12px;font-weight:500;border:1.5px solid ${isSelected?'var(--ink)':'var(--ink-faint)'};border-radius:var(--radius-sm);background:${isSelected?'var(--ink)':'var(--white)'};color:${isSelected?'#fff':'var(--ink-mid)'};cursor:pointer;text-align:center;min-width:56px;`;
+    btn.innerHTML = `${dayLabel}<span style="display:block;font-size:9px;font-weight:400;margin-top:1px;opacity:0.8;">${dayCount?dayCount+'👥':dateLabel}</span>`;
+    btn.onclick = () => { selectedBookingDate = dk; renderBookingPlan(cachedBookingGroups); };
+    tabsEl.appendChild(btn);
+  });
+  el.appendChild(tabsEl);
+
+  // Filter to selected date
+  const selectedGroups = (groups || []).filter(g => g.startTime.startsWith(selectedBookingDate));
+  const selDate = new Date(selectedBookingDate + 'T12:00:00');
+  const dateStr = selDate.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
+
   // Date header
-  const today = new Date();
-  const dateStr = today.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long'});
   const dHdr = document.createElement('div');
   dHdr.style.cssText = 'font-size:15px;font-weight:500;color:var(--ink);margin-bottom:14px;padding-bottom:8px;border-bottom:1.5px solid var(--clay);';
   dHdr.textContent = dateStr;
   el.appendChild(dHdr);
 
-  if (!groups || !groups.length) {
-    el.innerHTML += `<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);">No bookings today.</div>`;
+  if (!selectedGroups.length) {
+    const empty = document.createElement('div');
+    empty.style.cssText = 'text-align:center;padding:40px 16px;color:var(--ink-mid);';
+    empty.textContent = 'No bookings on this day.';
+    el.appendChild(empty);
     const btns = document.createElement('div');
     btns.style.cssText='display:flex;gap:8px;margin-top:12px;';
     btns.innerHTML=`<button class="reset-btn" style="flex:1;" onclick="tableAssignments={};fetchAndRenderBookings();">Refresh</button><button class="reset-btn" style="flex:1;" onclick="gcalToken=null;localStorage.removeItem('gcal_token');renderBookings();">Sign out</button>`;
@@ -1668,17 +1712,17 @@ function renderBookingPlan(groups) {
   }
 
   // ── GROUP LIST ────────────────────────────────────────────────────────────
-  const totalCrafters = groups.reduce((s,g)=>s+g.count,0);
+  const totalCrafters = selectedGroups.reduce((s,g)=>s+g.count,0);
 
   const summaryEl = document.createElement('div');
   summaryEl.style.cssText = 'display:flex;gap:6px;margin-bottom:12px;';
   summaryEl.innerHTML = `
-    <div class="bp-stat"><div class="bp-stat-n">${groups.length}</div><div class="bp-stat-l">Groups</div></div>
+    <div class="bp-stat"><div class="bp-stat-n">${selectedGroups.length}</div><div class="bp-stat-l">Groups</div></div>
     <div class="bp-stat"><div class="bp-stat-n">${totalCrafters}</div><div class="bp-stat-l">Crafters</div></div>`;
   el.appendChild(summaryEl);
 
   // Sort groups chronologically
-  const sortedGroups = [...groups].sort((a,b) => a.startTime.localeCompare(b.startTime));
+  const sortedGroups = [...selectedGroups].sort((a,b) => a.startTime.localeCompare(b.startTime));
 
   const listEl = document.createElement('div');
   listEl.style.cssText = 'margin-bottom:20px;';
@@ -1731,7 +1775,7 @@ function renderBookingPlan(groups) {
   el.appendChild(tlHdr);
 
   // Build bkgs for today only
-  const bkgs = groups.map(g => {
+  const bkgs = selectedGroups.map(g => {
     const sk = slotKey(g);
     const tableId = getAssignment(sk, g.key);
     const splitId = (tableAssignments[sk]||{})[g.key+'__split'] || null;
@@ -1879,7 +1923,7 @@ async function fetchAndRenderBookings(silent = false) {
 
   const now = new Date();
   const start = new Date(now); start.setHours(0,0,0,0);
-  const end = new Date(now); end.setHours(23,59,59,999);
+  const end = new Date(now); end.setDate(end.getDate()+6); end.setHours(23,59,59,999);
 
   const params = new URLSearchParams({
     calendarId: GCAL_ID,
@@ -1903,6 +1947,7 @@ async function fetchAndRenderBookings(silent = false) {
     const data = await res.json();
     const groups = parseBookings(data.items || []);
     cachedBookingGroups = groups;
+    selectedBookingDate = new Date().toISOString().split('T')[0];
     autoAssign(groups);
     if (!silent) renderBookingPlan(groups);
   } catch(err) {
