@@ -358,6 +358,7 @@ let selectedDay = (()=>{
 
 // ── SUPABASE SYNC ─────────────────────────────────────────────────────────────
 let saveTimer = null;
+let isLoaded = false; // guard: never save before initial load completes
 
 async function loadFromSupabase() {
   try {
@@ -374,6 +375,8 @@ async function loadFromSupabase() {
     }
   } catch(e) {
     console.error('Load error:', e);
+  } finally {
+    isLoaded = true; // allow saves from this point on
   }
 }
 
@@ -402,6 +405,7 @@ async function persistToSupabase() {
 
 // Debounce saves — waits 800ms after last change before hitting Supabase
 function save() {
+  if (!isLoaded) return; // never overwrite Supabase before we've loaded from it
   clearTimeout(saveTimer);
   saveTimer = setTimeout(persistToSupabase, 800);
 }
@@ -1797,227 +1801,6 @@ function renderBookingPlan(groups) {
     listEl.appendChild(row);
   });
   el.appendChild(listEl);
-
-  // ── TABLE PLAN (Canvas) ───────────────────────────────────────────────────
-  const tlHdr = document.createElement('div');
-  tlHdr.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:8px;';
-  tlHdr.textContent = 'Table plan';
-  el.appendChild(tlHdr);
-
-  const SEAT_W = 14;  // px per seat column
-  const ROW_H  = 18;  // px per 30-min slot
-  const TIME_W = 36;  // px for time column
-  const GAP_W  = 3;   // px gap between tables
-  const HDR_H  = 32;  // px for header
-
-  const totalSeats = T_DEF.reduce((s,t)=>s+t.seats, 0);
-  const totalW = TIME_W + totalSeats * SEAT_W + (T_DEF.length - 1) * GAP_W;
-  const totalH = HDR_H + SLOTS.length * ROW_H;
-
-  const wrap = document.createElement('div');
-  wrap.style.cssText = 'overflow-x:auto;-webkit-overflow-scrolling:touch;margin-bottom:16px;border:0.5px solid var(--ink-faint);border-radius:var(--radius);';
-
-  const canvas = document.createElement('canvas');
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = totalW * dpr;
-  canvas.height = totalH * dpr;
-  canvas.style.width = totalW + 'px';
-  canvas.style.height = totalH + 'px';
-  canvas.style.display = 'block';
-
-  const ctx = canvas.getContext('2d');
-  ctx.scale(dpr, dpr);
-
-  // Detect dark mode
-  const isDark = window.matchMedia('(prefers-color-scheme:dark)').matches;
-  const bg0     = isDark ? '#1a1a1a' : '#ffffff';
-  const bgFaint = isDark ? '#2a2a2a' : '#f5f5f5';
-  const textCol = isDark ? '#aaaaaa' : '#888888';
-  const lineCol = isDark ? '#333333' : '#e8e8e8';
-
-  // Background
-  ctx.fillStyle = bg0;
-  ctx.fillRect(0, 0, totalW, totalH);
-
-  // Table headers
-  let x = TIME_W;
-  T_DEF.forEach((t, ti) => {
-    if (ti > 0) { x += GAP_W; }
-    const w = t.seats * SEAT_W;
-    const c = COLORS[t.c];
-    ctx.fillStyle = c.bg;
-    ctx.fillRect(x, 0, w, HDR_H);
-    ctx.fillStyle = c.text;
-    ctx.font = `500 10px -apple-system, sans-serif`;
-    ctx.textAlign = 'center';
-    ctx.fillText(t.label, x + w/2, 13);
-    ctx.font = `400 8px -apple-system, sans-serif`;
-    ctx.fillStyle = c.text;
-    ctx.globalAlpha = 0.6;
-    ctx.fillText(t.seats + ' seats', x + w/2, 25);
-    ctx.globalAlpha = 1;
-
-    // Seat numbers
-    for (let s = 0; s < t.seats; s++) {
-      ctx.fillStyle = c.text;
-      ctx.globalAlpha = 0.5;
-      ctx.font = `400 7px -apple-system, sans-serif`;
-      ctx.textAlign = 'center';
-      ctx.fillText(s+1, x + s*SEAT_W + SEAT_W/2, HDR_H - 3);
-      ctx.globalAlpha = 1;
-    }
-
-    // Header border bottom
-    ctx.strokeStyle = c.border;
-    ctx.lineWidth = 1.5;
-    ctx.beginPath();
-    ctx.moveTo(x, HDR_H); ctx.lineTo(x+w, HDR_H);
-    ctx.stroke();
-
-    x += w;
-  });
-
-  // Gap between tables - draw grey bars
-  let gx = TIME_W;
-  T_DEF.forEach((t, ti) => {
-    gx += t.seats * SEAT_W;
-    if (ti < T_DEF.length - 1) {
-      ctx.fillStyle = lineCol;
-      ctx.fillRect(gx, 0, GAP_W, totalH);
-      gx += GAP_W;
-    }
-  });
-
-  // Build bkgs
-  const bkgs = selectedGroups.map(g => {
-    const sk = slotKey(g);
-    const tableId = getAssignment(sk, g.key);
-    const splitId = (tableAssignments[sk]||{})[g.key+'__split'] || null;
-    const startM = toMins(g.startTime);
-    const endM = startM + 150;
-    const tDef = T_DEF.find(t=>t.id===tableId);
-    const seatsOnMain = splitId && tDef ? Math.min(g.count, tDef.seats) : g.count;
-    const seatsOnSplit = splitId ? g.count - seatsOnMain : 0;
-    // Shade index
-    return {g, tableId, splitId, startM, endM, seatsOnMain, seatsOnSplit, sk};
-  });
-
-  // Assign shade indices
-  const tgi = {};
-  bkgs.forEach(b => {
-    if (b.tableId) { if (tgi[b.tableId]===undefined) tgi[b.tableId]=0; b.shadeIdx=tgi[b.tableId]++; }
-    if (b.splitId) { if (tgi[b.splitId]===undefined) tgi[b.splitId]=0; b.shadeIdxSplit=tgi[b.splitId]++; }
-  });
-
-  // Helper: get x offset for a table + seat
-  function tableX(tableId, seatOffset) {
-    let ox = TIME_W;
-    for (let ti = 0; ti < T_DEF.length; ti++) {
-      if (ti > 0) ox += GAP_W;
-      if (T_DEF[ti].id === tableId) return ox + seatOffset * SEAT_W;
-      ox += T_DEF[ti].seats * SEAT_W;
-    }
-    return ox;
-  }
-
-  // Draw rows: time labels + grid lines
-  SLOTS.forEach((slotMin, ri) => {
-    const y = HDR_H + ri * ROW_H;
-    const isHour = slotMin % 60 === 0;
-
-    // Row background (alternate faint)
-    if (!isHour) {
-      ctx.fillStyle = isDark ? '#1e1e1e' : '#fafafa';
-      ctx.fillRect(0, y, totalW, ROW_H);
-    }
-
-    // Grid line
-    ctx.strokeStyle = lineCol;
-    ctx.lineWidth = isHour ? 0.8 : 0.3;
-    ctx.beginPath();
-    ctx.moveTo(0, y); ctx.lineTo(totalW, y);
-    ctx.stroke();
-
-    // Time label
-    const h = Math.floor(slotMin/60), m = slotMin%60;
-    if (isHour) {
-      ctx.fillStyle = textCol;
-      ctx.font = `500 9px -apple-system, sans-serif`;
-      ctx.textAlign = 'right';
-      ctx.fillText(`${h%12||12}`, TIME_W - 4, y + ROW_H - 5);
-    }
-  });
-
-  // Draw booking blocks
-  bkgs.forEach(b => {
-    const drawBlock = (tableId, seatsCount, shadeI) => {
-      if (!tableId || !seatsCount) return;
-      const tDef2 = T_DEF.find(t=>t.id===tableId);
-      if (!tDef2) return;
-      const c = COLORS[tDef2.c];
-      const shades = SHADES[tDef2.c] || SHADES.main;
-
-      // Find seat offset for this booking on this table
-      let seatStart = 0;
-      bkgs.forEach(other => {
-        if (other === b) return;
-        if (other.tableId === tableId && other.startM < b.startM + 150 && other.endM > b.startM) {
-          // overlapping on same table — offset seats
-        }
-      });
-      // Simple: use shade index * 0 for seat offset (already tracked by seatsOnMain/split)
-      // Actually just pack from seat 0
-      let usedSeats = 0;
-      bkgs.forEach(other => {
-        if (other === b) return;
-        const otherSeats = other.tableId===tableId ? other.seatsOnMain : (other.splitId===tableId ? other.seatsOnSplit : 0);
-        if (otherSeats > 0 && other.shadeIdx < shadeI) usedSeats += otherSeats;
-      });
-
-      const x0 = tableX(tableId, usedSeats);
-      const slotStart = SLOTS.indexOf(b.startM);
-      const slotEnd = SLOTS.indexOf(b.endM) !== -1 ? SLOTS.indexOf(b.endM) : SLOTS.length;
-      if (slotStart === -1) return;
-
-      const y0 = HDR_H + slotStart * ROW_H + 1;
-      const blockH = (slotEnd - slotStart) * ROW_H - 2;
-      const blockW = seatsCount * SEAT_W - 2;
-
-      // Fill
-      ctx.fillStyle = shades[shadeI % shades.length];
-      ctx.beginPath();
-      const r = 3;
-      ctx.roundRect ? ctx.roundRect(x0+1, y0, blockW, blockH, r) : ctx.rect(x0+1, y0, blockW, blockH);
-      ctx.fill();
-
-      // Border
-      ctx.strokeStyle = c.border;
-      ctx.lineWidth = 1.5;
-      ctx.beginPath();
-      ctx.roundRect ? ctx.roundRect(x0+1, y0, blockW, blockH, r) : ctx.rect(x0+1, y0, blockW, blockH);
-      ctx.stroke();
-
-      // Name label
-      ctx.fillStyle = c.text;
-      ctx.font = `500 9px -apple-system, sans-serif`;
-      ctx.textAlign = 'left';
-      ctx.save();
-      ctx.rect(x0+1, y0, blockW, blockH);
-      ctx.clip();
-      ctx.fillText(b.g.name, x0+4, y0+11);
-      if (b.g.isPAP || b.g.isCB) {
-        ctx.font = `500 7px -apple-system, sans-serif`;
-        ctx.fillText(b.g.isPAP?'PAP':'CB', x0+4, y0+22);
-      }
-      ctx.restore();
-    };
-
-    drawBlock(b.tableId, b.seatsOnMain, b.shadeIdx||0);
-    if (b.splitId) drawBlock(b.splitId, b.seatsOnSplit, b.shadeIdxSplit||0);
-  });
-
-  wrap.appendChild(canvas);
-  el.appendChild(wrap);
 
   const btns=document.createElement('div');
   btns.style.cssText='display:flex;gap:8px;';
