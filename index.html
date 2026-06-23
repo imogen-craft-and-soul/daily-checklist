@@ -171,58 +171,70 @@ const ROW_ID = 'current-week';
 
 // ── TASK DATA ─────────────────────────────────────────────────────────────────
 const TASKS = [
-  // TUESDAY
-  {name:'Pottery delivery - pick up pottery from kiln', day:'Tue', priority:'P0', time:'', type:'Pottery delivery', freq:'Weekly', sortOrder:0},
-  {name:'Front room - mop floor', day:'Tue', priority:'P1', time:'15 mins', type:'Clean', freq:'Weekly'},
+  // EVERYDAY (Tue, Wed, Thu, Fri)
+  {name:'Garage - refill the pottery cupboards', day:'Tue', priority:'P0', time:'20 mins', type:'Organise', freq:'Weekly'},
+  {name:'Garage - refill the pottery cupboards', day:'Wed', priority:'P0', time:'20 mins', type:'Organise', freq:'Weekly'},
+  {name:'Garage - refill the pottery cupboards', day:'Thu', priority:'P0', time:'20 mins', type:'Organise', freq:'Weekly'},
+  {name:'Garage - refill the pottery cupboards', day:'Fri', priority:'P0', time:'20 mins', type:'Organise', freq:'Weekly'},
+
+  {name:'Storeroom - organise and stamp notebooks', day:'Tue', priority:'P0', time:'15 mins', type:'Organise', freq:'Weekly'},
+  {name:'Storeroom - organise and stamp notebooks', day:'Wed', priority:'P0', time:'15 mins', type:'Organise', freq:'Weekly'},
+  {name:'Storeroom - organise and stamp notebooks', day:'Thu', priority:'P0', time:'15 mins', type:'Organise', freq:'Weekly'},
+  {name:'Storeroom - organise and stamp notebooks', day:'Fri', priority:'P0', time:'15 mins', type:'Organise', freq:'Weekly'},
+
   {name:'Clean tea and coffee station', day:'Tue', priority:'P0', time:'10 mins', type:'Clean', freq:'2x weekly'},
+  {name:'Clean tea and coffee station', day:'Wed', priority:'P0', time:'10 mins', type:'Clean', freq:'2x weekly'},
+  {name:'Clean tea and coffee station', day:'Thu', priority:'P0', time:'10 mins', type:'Clean', freq:'2x weekly'},
+  {name:'Clean tea and coffee station', day:'Fri', priority:'P0', time:'10 mins', type:'Clean', freq:'2x weekly'},
+
+  {name:'Desk area - clean desktop', day:'Tue', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
+  {name:'Desk area - clean desktop', day:'Wed', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
+  {name:'Desk area - clean desktop', day:'Thu', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
+  {name:'Desk area - clean desktop', day:'Fri', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
+
+  // TUESDAY
+  {name:'Front room - sweep floor', day:'Tue', priority:'P0', time:'30 mins', type:'Clean', freq:'2x weekly'},
   {name:'Front room - hoover floor', day:'Tue', priority:'P0', time:'30 mins', type:'Clean', freq:'Weekly'},
-  {name:'Clean windows - outside', day:'Tue', priority:'P2', time:'30 mins', type:'Clean', freq:'Monthly'},
-  {name:'Clean windows - inside', day:'Tue', priority:'P2', time:'30 mins', type:'Clean', freq:'Monthly'},
   {name:'Bathroom - clean toilet', day:'Tue', priority:'P0', time:'10 mins', type:'Clean', freq:'2x weekly'},
   {name:'Bathroom - mop floor', day:'Tue', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Bathroom - clean sink', day:'Tue', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Bathroom - clean mirror', day:'Tue', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Garage - refill the pottery cupboards', day:'Tue', priority:'P0', time:'20 mins', type:'Organise', freq:'2x weekly'},
-  {name:'Storeroom - organize and stamp 80 notebooks', day:'Tue', priority:'P0', time:'15 mins', type:'Organise', freq:'Weekly'},
+  {name:'Pottery ready - find and email', day:'Tue', priority:'P0', time:'4 hours', type:'Pottery delivery', freq:'2x weekly'},
   {name:'Front room - water plants', day:'Tue', priority:'P1', time:'10 mins', type:'Garden', freq:'Weekly'},
-  {name:'Stock count - Pottery', day:'Tue', priority:'P1', time:'15 mins', type:'Stock count', freq:'Monthly'},
-  {name:'Stock count - Air dry clay', day:'Tue', priority:'P1', time:'5 mins', type:'Stock count', freq:'Monthly'},
-  {name:'Stock count - Beads', day:'Tue', priority:'P1', time:'5 mins', type:'Stock count', freq:'Monthly'},
-  {name:'Stock count - Anything else', day:'Tue', priority:'P1', time:'', type:'Stock count', freq:'Monthly'},
+  {name:'Front room - mop floor', day:'Tue', priority:'P1', time:'15 mins', type:'Clean', freq:'Weekly'},
+  {name:'Pottery postage - check emails, package and label', day:'Tue', priority:'P1', time:'30 mins', type:'Pottery delivery', freq:'Weekly'},
+  {name:'Storeroom - clean pottery paint bottles', day:'Tue', priority:'P1', time:'45 mins', type:'Clean', freq:'Weekly'},
+  {name:'Craft tables - sharpen pencils', day:'Tue', priority:'P1', time:'30 mins', type:'Organise', freq:'Weekly'},
+  {name:'Clean windows - outside', day:'Tue', priority:'P2', time:'30 mins', type:'Clean', freq:'Monthly'},
+  {name:'Clean windows - inside', day:'Tue', priority:'P2', time:'30 mins', type:'Clean', freq:'Monthly'},
+  {name:'Desk area - sweep floor', day:'Tue', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
 
   // WEDNESDAY
-  {name:'Pottery ready - find and email', day:'Wed', priority:'P0', time:'3 hours', type:'Pottery delivery', freq:'2x weekly', sortOrder:0},
-  {name:'Pottery postage - check emails, package and label', day:'Wed', priority:'P0', time:'30 mins', type:'Pottery delivery', freq:'Weekly', sortOrder:0},
-  {name:'Front shelf - clean top', day:'Wed', priority:'P0', time:'25 mins', type:'Clean', freq:'Weekly', sortOrder:1},
-  {name:'Front shelf - clean acrylic lids - inside and outside', day:'Wed', priority:'P0', time:'20 mins', type:'Clean', freq:'Weekly', sortOrder:1},
-  {name:'Front shelf - refill acrylic bottles', day:'Wed', priority:'P0', time:'20 mins', type:'Organise', freq:'Weekly', sortOrder:1},
-  {name:'Front shelf - dust inside shelves', day:'Wed', priority:'P0', time:'20 mins', type:'Clean', freq:'Monthly', sortOrder:1},
-  {name:'Canvas shelves - clean and dust', day:'Wed', priority:'P1', time:'15 mins', type:'Clean', freq:'Monthly'},
-  {name:'Clay racks - bin old clay', day:'Wed', priority:'P1', time:'20 mins', type:'Clean', freq:'Weekly'},
-  {name:'Clay racks - group + photograph', day:'Wed', priority:'P1', time:'20 mins', type:'Organise', freq:'Weekly'},
+  {name:'Bathroom - clean sink', day:'Wed', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
+  {name:'Bathroom - clean mirror', day:'Wed', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
+  {name:'Front shelf - clean acrylic lids', day:'Wed', priority:'P0', time:'20 mins', type:'Clean', freq:'Weekly'},
+  {name:'Front shelf - clean top', day:'Wed', priority:'P0', time:'25 mins', type:'Clean', freq:'Weekly'},
   {name:'Craft tables - sort and tidy pens', day:'Wed', priority:'P1', time:'20 mins', type:'Organise', freq:'Weekly'},
-  {name:'Craft tables - sharpen pencils', day:'Wed', priority:'P1', time:'30 mins', type:'Organise', freq:'Weekly'},
-  {name:'Storeroom - clean pottery paint bottles', day:'Wed', priority:'P1', time:'45 mins', type:'Clean', freq:'Weekly'},
-  {name:'Storeroom - clean drying rack', day:'Wed', priority:'P1', time:'30 mins', type:'Clean', freq:'Monthly'},
-  {name:'Storeroom - refill pottery paint', day:'Wed', priority:'P0', time:'45 mins', type:'Organise', freq:'Weekly'},
-  {name:'Desk area - sweep floor', day:'Wed', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
-  {name:'Desk area - clean desktop', day:'Wed', priority:'P2', time:'10 mins', type:'Clean', freq:'Weekly'},
+  {name:'Front shelf - dust inside shelves', day:'Wed', priority:'P1', time:'20 mins', type:'Clean', freq:'Fortnightly'},
+  {name:'Front shelf - refill acrylic bottles', day:'Wed', priority:'P1', time:'20 mins', type:'Organise', freq:'Weekly'},
+
+  // THURSDAY
+  {name:'Storeroom - refill pottery paint', day:'Thu', priority:'P0', time:'45 mins', type:'Organise', freq:'Weekly'},
+  {name:'Charge lamps', day:'Thu', priority:'P0', time:'5 mins', type:'Organise', freq:'Weekly'},
+  {name:'Clean mirror', day:'Thu', priority:'P1', time:'10 mins', type:'Clean', freq:'Fortnightly'},
+  {name:'Book shelves - clean and dust', day:'Thu', priority:'P1', time:'30 mins', type:'Clean', freq:'Fortnightly'},
+  {name:'Window shelves - wipe and dust', day:'Thu', priority:'P1', time:'30 mins', type:'Clean', freq:'Fortnightly'},
+  {name:'Storeroom - clean drying rack', day:'Thu', priority:'P1', time:'30 mins', type:'Clean', freq:'Fortnightly'},
+  {name:'Storeroom - organise info cards', day:'Thu', priority:'P2', time:'15 mins', type:'Organise', freq:'Weekly'},
 
   // FRIDAY
-  {name:'Pottery ready - find and email', day:'Fri', priority:'P0', time:'3 hours', type:'Pottery delivery', freq:'2x weekly', sortOrder:0},
   {name:'Front room - sweep floor', day:'Fri', priority:'P0', time:'30 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Window shelves - wipe and dust', day:'Fri', priority:'P1', time:'30 mins', type:'Clean', freq:'Monthly'},
-  {name:'Book shelves - clean and dust', day:'Fri', priority:'P1', time:'30 mins', type:'Clean', freq:'Monthly'},
-  {name:'Clean mirror', day:'Fri', priority:'P1', time:'10 mins', type:'Clean', freq:'Monthly'},
+  {name:'Pottery ready - find and email', day:'Fri', priority:'P0', time:'4 hours', type:'Pottery delivery', freq:'2x weekly'},
+  {name:'Charge lamps', day:'Fri', priority:'P0', time:'5 mins', type:'Organise', freq:'Weekly'},
   {name:'Storeroom - clean sink', day:'Fri', priority:'P1', time:'10 mins', type:'Clean', freq:'Weekly'},
-  {name:'Storeroom - organize info cards', day:'Fri', priority:'P2', time:'15 mins', type:'Organise', freq:'Weekly'},
-  {name:'Storeroom - organise bubble wrap', day:'Fri', priority:'P2', time:'20 mins', type:'Organise', freq:'Weekly'},
   {name:'Storeroom - prep embroidery hoops', day:'Fri', priority:'P1', time:'30 mins', type:'Organise', freq:'Weekly'},
-  {name:'Garage - refill the pottery cupboards', day:'Fri', priority:'P0', time:'20 mins', type:'Organise', freq:'2x weekly'},
-  {name:'Bathroom - clean toilet', day:'Fri', priority:'P0', time:'10 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Bathroom - mop floor', day:'Fri', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Bathroom - clean sink', day:'Fri', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
-  {name:'Bathroom - clean mirror', day:'Fri', priority:'P0', time:'5 mins', type:'Clean', freq:'2x weekly'},
+  {name:'Canvas shelves - clean and dust', day:'Fri', priority:'P1', time:'15 mins', type:'Clean', freq:'Fortnightly'},
+  {name:'Clay racks - bin old clay', day:'Fri', priority:'P1', time:'20 mins', type:'Clean', freq:'Weekly'},
+  {name:'Clay racks - group + photograph', day:'Fri', priority:'P1', time:'20 mins', type:'Organise', freq:'Weekly'},
+  {name:'Storeroom - organise bubble wrap', day:'Fri', priority:'P2', time:'20 mins', type:'Organise', freq:'Weekly'},
 ];
 
 const OC_TASKS = {
@@ -256,11 +268,10 @@ const OC_TASKS = {
 };
 
 const DAYS = ['Tue','Wed','Thu','Fri','Sat','Sun'];
-const CATCHUP_DAYS = new Set(['Thu','Sat','Sun']);
+const CATCHUP_DAYS = new Set(['Sat','Sun']);
 const CATCHUP_SOURCES = {
-  Thu: ['Tue','Wed'],
-  Sat: ['Tue','Wed','Fri'],
-  Sun: ['Tue','Wed','Fri'],
+  Sat: ['Tue','Wed','Thu','Fri'],
+  Sun: ['Tue','Wed','Thu','Fri'],
 };
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
@@ -1304,7 +1315,7 @@ async function renderHistory() {
   rows.forEach(row => {
     const d = new Date(row.week_ending);
     const label = d.toLocaleDateString('en-GB', {day:'numeric', month:'long', year:'numeric'});
-    const allTasks = TASKS.filter(t => t.day !== 'Thu');
+    const allTasks = TASKS;
     const totalDone = allTasks.filter(t => (row.checked||{})[key(t.day, t.name)]).length;
     const pct = allTasks.length ? Math.round(totalDone/allTasks.length*100) : 0;
 
@@ -1344,14 +1355,15 @@ async function renderHistory() {
       <div style="display:none;padding:0 14px 14px;border-top:1px solid var(--ink-faint);">`;
 
     // Day breakdown
-    ['Tue','Wed','Fri'].forEach(dy => {
+    ['Tue','Wed','Thu','Fri'].forEach(dy => {
       const dayTasks = TASKS.filter(t => t.day === dy);
       const dayDone = dayTasks.filter(t => (row.checked||{})[key(dy, t.name)]).length;
       const dayPct = dayTasks.length ? Math.round(dayDone/dayTasks.length*100) : 0;
       const dayNote = (row.notes||{})[dy] || {};
+      const dyFullName = {Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday'}[dy];
       html += `<div style="margin-top:12px;">
         <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:4px;">
-          <div style="font-size:12px;font-weight:500;color:var(--ink);">${dy === 'Tue'?'Tuesday':dy==='Wed'?'Wednesday':'Friday'}</div>
+          <div style="font-size:12px;font-weight:500;color:var(--ink);">${dyFullName}</div>
           <div style="font-size:11px;color:var(--ink-mid);">${dayDone}/${dayTasks.length}${dayNote.rating?` · ${'★'.repeat(dayNote.rating)}`:''}</div>
         </div>`;
       noteFields.forEach(({k,l}) => {
