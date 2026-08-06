@@ -136,9 +136,9 @@
 <canvas id="confetti-canvas"></canvas>
 
 <nav class="nav">
-  <button class="nav-btn active" onclick="switchView('today')"><span class="nav-icon">☀️</span>Today</button>
-  <button class="nav-btn" onclick="switchView('bookings')"><span class="nav-icon">🗓️</span>Bookings</button>
-  <button class="nav-btn" onclick="switchView('manager')"><span class="nav-icon">💡</span>Summary</button>
+  <button class="nav-btn active" onclick="switchView('today', this)"><span class="nav-icon">☀️</span>Today</button>
+  <button class="nav-btn" onclick="switchView('bookings', this)"><span class="nav-icon">🗓️</span>Bookings</button>
+  <button class="nav-btn" onclick="switchView('manager', this)"><span class="nav-icon">💡</span>Summary</button>
 </nav>
 
 <div id="today-view" class="view active">
@@ -593,11 +593,11 @@ function toggleTodayNotes(hdr) {
 
 
 // ── RENDER: MANAGER VIEW ──────────────────────────────────────────────────────
-function switchView(v) {
+function switchView(v, btn) {
   document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
   document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
   document.getElementById(v+'-view').classList.add('active');
-  event.currentTarget.classList.add('active');
+  if (btn) btn.classList.add('active');
   if (v==='manager') renderManager();
   if (v==='today') renderToday();
   if (v==='bookings') renderBookings();
