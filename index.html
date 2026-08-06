@@ -531,6 +531,23 @@ function renderToday() {
   taskWrap.appendChild(addRow);
   el.appendChild(taskWrap);
 
+  // Notes about the day
+  const dayNote = (notes[dk] || {}).dayNote || '';
+  const dayNoteWrap = document.createElement('div');
+  dayNoteWrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;padding:12px 14px;';
+  dayNoteWrap.innerHTML = '<div style="font-size:13px;font-weight:500;color:var(--ink);margin-bottom:7px;">📝 Notes about the day</div>';
+  const dayNoteInput = document.createElement('textarea');
+  dayNoteInput.placeholder = 'Share anything with the team today…';
+  dayNoteInput.value = dayNote;
+  dayNoteInput.style.cssText = 'width:100%;min-height:70px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:var(--white);border:1px solid var(--ink-faint);border-radius:var(--radius-sm);resize:none;outline:none;line-height:1.5;box-sizing:border-box;';
+  dayNoteInput.oninput = () => {
+    if (!notes[dk]) notes[dk] = {};
+    notes[dk].dayNote = dayNoteInput.value;
+    save();
+  };
+  dayNoteWrap.appendChild(dayNoteInput);
+  el.appendChild(dayNoteWrap);
+
   // Shop Closed
   const isClosed = !!shopClosed[dk];
   const closedEl = document.createElement('div');
@@ -576,137 +593,154 @@ function toggleTodayNotes(hdr) {
 
 
 // ── RENDER: MANAGER VIEW ──────────────────────────────────────────────────────
-function renderManager() {
-  document.getElementById('mgrDate').textContent = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});
-  document.getElementById('mgrOcWeek').innerHTML = '';
+function switchView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById(v+'-view').classList.add('active');
+  event.currentTarget.classList.add('active');
+  if (v==='manager') renderManager();
+  if (v==='today') renderToday();
+  if (v==='bookings') renderBookings();
+}
 
+function renderManager() {
   const el = document.getElementById('mgrCards');
   el.innerHTML = '';
+  document.getElementById('mgrOcWeek').innerHTML = '';
+  document.getElementById('mgrNotesSummary').innerHTML = '';
+  document.getElementById('mgrAiSummary').innerHTML = '';
 
-  const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas & shopping list'}];
-  const icons = {well:'✅', improve:'💡', ideas:'🛒'};
-
-  // Get last 7 days with data (excluding today)
   const dk = todayKey();
-  const allDateKeys = Object.keys({...dailyTasks, ...notes, ...shopOpen, ...shopClosed})
-    .filter(d => d !== dk)
-    .sort().reverse().slice(0, 14);
 
-  // Crafters from bookings tab (sum of all cached)
-  const CRAFTER_TARGET = 100;
-  // Count crafters from this week's bookings if available
-  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 2); // Tuesday
-  const weekKeys = Object.keys(crafters).filter(k => k >= weekStart.toISOString().split('T')[0] && k <= dk);
-  const totalCraftersWeek = weekKeys.reduce((s,k)=>s+(crafters[k]||0),0);
+  // ── All days with data, most recent first ────────────────────────────────
+  const allKeys = [...new Set([
+    ...Object.keys(dailyTasks),
+    ...Object.keys(notes),
+    ...Object.keys(shopOpen),
+    ...Object.keys(shopClosed)
+  ])].sort().reverse().slice(0, 30);
 
-  if (Object.keys(crafters).length > 0) {
-    const crafterPct = Math.min(100, Math.round(totalCraftersWeek / CRAFTER_TARGET * 100));
-    const crafterColor = crafterPct >= 100 ? '#1D9E75' : crafterPct >= 60 ? 'var(--amber)' : 'var(--clay)';
-    const totalEl = document.createElement('div');
-    totalEl.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;';
-    totalEl.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-size:13px;color:var(--ink-mid);">👥 Total crafters this week</div>
-        <div style="font-size:20px;font-weight:600;color:var(--ink);">${totalCraftersWeek}<span style="font-size:13px;font-weight:400;color:var(--ink-mid);">/${CRAFTER_TARGET}</span></div>
-      </div>
-      <div style="background:var(--ink-faint);border-radius:99px;height:6px;overflow:hidden;margin-bottom:5px;">
-        <div style="height:100%;border-radius:99px;background:${crafterColor};width:${crafterPct}%;transition:width 0.4s;"></div>
-      </div>
-      <div style="font-size:11px;color:var(--ink-mid);">${crafterPct >= 100 ? '🎉 Target reached!' : `${CRAFTER_TARGET - totalCraftersWeek} to go`}</div>`;
-    el.appendChild(totalEl);
+  if (!allKeys.length) {
+    el.innerHTML = '<div style="text-align:center;padding:40px 16px;color:var(--ink-mid);font-size:14px;">No data yet — start by opening the shop today!</div>';
+    return;
   }
 
-  // ── Today's summary card ─────────────────────────────────────────────────
-  const todayTasks = dailyTasks[dk] || [];
-  const todayNotes = notes[dk] || {};
-  const todayOpen = !!shopOpen[dk];
-  const todayClose = !!shopClosed[dk];
-  const todayDone = todayTasks.filter(t=>t.done).length;
-  const todayLabel = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
+  allKeys.forEach(dateKey => {
+    const dayTasks  = dailyTasks[dateKey] || [];
+    const dayNotes  = notes[dateKey] || {};
+    const dayOpen   = !!shopOpen[dateKey];
+    const dayClosed = !!shopClosed[dateKey];
+    const doneTasks = dayTasks.filter(t => t.done).length;
+    const totalTasks = dayTasks.length;
+    const pct = totalTasks ? Math.round(doneTasks / totalTasks * 100) : null;
+    const isToday = dateKey === dk;
 
-  const todayCard = document.createElement('div');
-  todayCard.style.cssText = `background:#fff;border:1.5px solid ${(todayOpen&&todayClose)?'#1D9E75':'var(--clay)'};border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;`;
-  todayCard.innerHTML = `
-    <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:8px;">Today — ${todayLabel}</div>
-    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
-      <span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;background:${todayOpen?'#E1F5EE':'#FAECE7'};color:${todayOpen?'#0F6E56':'#993C1D'};">${todayOpen?'✓ Open':'✗ Not opened'}</span>
-      <span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;background:${todayClose?'#E1F5EE':'#FAECE7'};color:${todayClose?'#0F6E56':'#993C1D'};">${todayClose?'✓ Closed':'✗ Not closed'}</span>
-      ${todayTasks.length?`<span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;background:var(--ink-faint);color:var(--ink-mid);">${todayDone}/${todayTasks.length} tasks</span>`:''}
-      ${todayNotes.rating?`<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:#FEF9E0;color:#92700A;">${'★'.repeat(todayNotes.rating)}</span>`:''}
-    </div>
-    ${todayTasks.length?`<div style="font-size:11px;color:var(--ink-mid);">${todayTasks.map(t=>`<span style="${t.done?'text-decoration:line-through;opacity:0.5;':''}">${t.name}</span>`).join(' · ')}</div>`:''}`;
-  el.appendChild(todayCard);
+    const d = new Date(dateKey + 'T12:00:00');
+    const label = isToday
+      ? 'Today'
+      : d.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'short'});
 
-  // ── Past days ────────────────────────────────────────────────────────────
-  if (allDateKeys.length > 0) {
-    const pastHdr = document.createElement('div');
-    pastHdr.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin:14px 0 8px;';
-    pastHdr.textContent = 'Previous days';
-    el.appendChild(pastHdr);
+    const smooth = dayOpen && dayClosed;
+    const emoji = smooth ? '✨' : (dayOpen || dayClosed) ? '🙂' : '—';
+    const borderColor = smooth ? '#1D9E75' : isToday ? 'var(--clay)' : 'var(--ink-faint)';
+    const pctColor = pct === 100 ? '#1D9E75' : pct !== null && pct >= 50 ? 'var(--amber)' : 'var(--clay)';
 
-    allDateKeys.forEach(dateKey => {
-      const dayTasks = dailyTasks[dateKey] || [];
-      const dayNotes = notes[dateKey] || {};
-      const dayOpen  = !!shopOpen[dateKey];
-      const dayClosed = !!shopClosed[dateKey];
-      const dayDone  = dayTasks.filter(t=>t.done).length;
-      const smooth = dayOpen && dayClosed;
-      const d = new Date(dateKey + 'T12:00:00');
-      const label = d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
+    const card = document.createElement('div');
+    card.style.cssText = `background:#fff;border:${isToday||smooth?'1.5px':'1px'} solid ${borderColor};border-radius:var(--radius);margin-bottom:8px;overflow:hidden;`;
 
-      const card = document.createElement('div');
-      card.style.cssText = `background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:6px;overflow:hidden;`;
-      card.innerHTML = `
-        <div style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
-          <div style="display:flex;align-items:center;gap:8px;">
-            <span style="font-size:14px;">${smooth?'✨':dayOpen||dayClosed?'🙂':'—'}</span>
-            <div style="font-size:13px;font-weight:500;color:var(--ink);">${label}</div>
-          </div>
-          <div style="display:flex;gap:4px;align-items:center;">
-            ${dayNotes.rating?`<span style="font-size:11px;color:#F5C842;">${'★'.repeat(dayNotes.rating)}</span>`:''}
-            <span style="font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;background:${dayOpen?'#E1F5EE':'#FAECE7'};color:${dayOpen?'#0F6E56':'#993C1D'};">☀️</span>
-            <span style="font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;background:${dayClosed?'#E1F5EE':'#FAECE7'};color:${dayClosed?'#0F6E56':'#993C1D'};">🌙</span>
-            <span style="font-size:10px;color:var(--ink-mid);">▾</span>
-          </div>
-        </div>
-        <div style="display:none;padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
-          ${dayTasks.length?`<div style="margin-top:8px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">Tasks</div>${dayTasks.map(t=>`<div style="font-size:12px;color:var(--ink);padding:2px 0;${t.done?'text-decoration:line-through;opacity:0.45;':''}">${t.done?'✓':''} ${t.name}</div>`).join('')}</div>`:''}
-          ${noteFields.map(({key:fk,label:fl})=>dayNotes[fk]?`<div style="margin-top:8px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:3px;">${fl}</div><div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes[fk]}</div></div>`:'').join('')}
+    // Header row
+    const hdr = document.createElement('div');
+    hdr.style.cssText = 'padding:11px 14px;display:flex;align-items:center;justify-content:space-between;cursor:pointer;';
+
+    const left = document.createElement('div');
+    left.style.cssText = 'display:flex;align-items:center;gap:8px;';
+    left.innerHTML = `<span style="font-size:14px;">${emoji}</span><span style="font-size:13px;font-weight:500;color:var(--ink);">${label}</span>`;
+
+    const right = document.createElement('div');
+    right.style.cssText = 'display:flex;align-items:center;gap:5px;';
+
+    // Progress pill
+    if (pct !== null) {
+      const pill = document.createElement('span');
+      pill.style.cssText = `font-size:10px;font-weight:600;padding:2px 7px;border-radius:99px;background:${pct===100?'#E1F5EE':pct>=50?'#FDF0DC':'#FAECE7'};color:${pctColor};`;
+      pill.textContent = pct === 100 ? '✓ All done' : `${doneTasks}/${totalTasks} tasks`;
+      right.appendChild(pill);
+    }
+
+    // Open/closed badges
+    const openBadge = document.createElement('span');
+    openBadge.style.cssText = `font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;background:${dayOpen?'#E1F5EE':'#FAECE7'};color:${dayOpen?'#0F6E56':'#993C1D'};`;
+    openBadge.textContent = '☀️';
+    const closeBadge = document.createElement('span');
+    closeBadge.style.cssText = `font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;background:${dayClosed?'#E1F5EE':'#FAECE7'};color:${dayClosed?'#0F6E56':'#993C1D'};`;
+    closeBadge.textContent = '🌙';
+
+    const chev = document.createElement('span');
+    chev.style.cssText = 'font-size:10px;color:var(--ink-mid);';
+    chev.textContent = '▾';
+
+    right.appendChild(openBadge);
+    right.appendChild(closeBadge);
+    right.appendChild(chev);
+
+    hdr.appendChild(left);
+    hdr.appendChild(right);
+
+    // Expandable body
+    const body = document.createElement('div');
+    body.style.cssText = 'display:none;border-top:0.5px solid var(--ink-faint);padding:10px 14px 12px;';
+
+    // Progress bar
+    if (pct !== null) {
+      body.innerHTML += `
+        <div style="background:var(--ink-faint);border-radius:99px;height:5px;overflow:hidden;margin-bottom:8px;">
+          <div style="height:100%;border-radius:99px;background:${pctColor};width:${pct}%;transition:width 0.4s;"></div>
         </div>`;
-      el.appendChild(card);
-    });
-  }
+    }
 
-  // ── Notes summary across all dates ────────────────────────────────────────
-  const notesEl = document.getElementById('mgrNotesSummary');
-  let notesHTML = '';
-  noteFields.forEach(({key:fkey, label}) => {
-    const entries = Object.entries(notes)
-      .filter(([,n]) => n[fkey])
-      .sort((a,b) => b[0].localeCompare(a[0]))
-      .slice(0, 10)
-      .map(([dateKey, n]) => {
-        const d = new Date(dateKey + 'T12:00:00');
-        return {d: d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}), text: n[fkey]};
-      });
-    if (!entries.length) return;
-    const icon = fkey==='well'?'✅':fkey==='improve'?'💡':'🛒';
-    notesHTML += `
-      <div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
-        <div style="padding:10px 14px 8px;border-bottom:0.5px solid var(--ink-faint);display:flex;align-items:center;gap:7px;">
-          <span style="font-size:14px;">${icon}</span>
-          <span style="font-size:12px;font-weight:500;color:var(--ink);">${label}</span>
-        </div>
-        ${entries.map(e=>`<div style="display:flex;gap:10px;padding:9px 14px;border-bottom:0.5px solid var(--ink-faint);">
-          <div style="flex-shrink:0;min-width:44px;font-size:10px;font-weight:600;color:var(--ink-mid);margin-top:2px;">${e.d}</div>
-          <div style="font-size:13px;color:var(--ink);line-height:1.5;flex:1;">${e.text}</div>
-        </div>`).join('')}
+    // Task list
+    if (dayTasks.length) {
+      const taskHtml = dayTasks.map(t =>
+        `<div style="font-size:12px;color:var(--ink);padding:3px 0;display:flex;align-items:center;gap:6px;${t.done?'opacity:0.45;':''}">
+          <span style="color:${t.done?'#1D9E75':'var(--ink-faint)'};">${t.done?'✓':'○'}</span>
+          <span style="${t.done?'text-decoration:line-through;':''}">${t.name}</span>
+        </div>`).join('');
+      body.innerHTML += `<div style="margin-bottom:${dayNotes.dayNote||dayNotes.well||dayNotes.improve||dayNotes.ideas?'10px':'0'}">${taskHtml}</div>`;
+    }
+
+    // Day note
+    if (dayNotes.dayNote) {
+      body.innerHTML += `<div style="background:#F8F6F3;border-radius:var(--radius-sm);padding:8px 10px;margin-bottom:8px;">
+        <div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:3px;">📝 Notes</div>
+        <div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes.dayNote}</div>
       </div>`;
-  });
-  notesEl.innerHTML = notesHTML ? `<div style="height:0.5px;background:var(--ink-faint);margin:4px 0 14px;"></div>${notesHTML}` : '';
+    }
 
-  document.getElementById('mgrAiSummary').innerHTML =
-    `<button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Summarise the week with AI</button>`;
+    // End of day notes
+    const noteFields = [{key:'well',label:'What went well',icon:'✅'},{key:'improve',label:'Could be improved',icon:'💡'},{key:'ideas',label:'Ideas & shopping',icon:'🛒'}];
+    noteFields.forEach(({key:fk, label:fl, icon}) => {
+      if (!dayNotes[fk]) return;
+      body.innerHTML += `<div style="margin-top:6px;">
+        <div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:2px;">${icon} ${fl}</div>
+        <div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes[fk]}</div>
+      </div>`;
+    });
+
+    // Star rating
+    if (dayNotes.rating) {
+      body.innerHTML += `<div style="margin-top:8px;font-size:13px;color:#F5C842;">${'★'.repeat(dayNotes.rating)}${'☆'.repeat(5-dayNotes.rating)}</div>`;
+    }
+
+    hdr.onclick = () => {
+      const isOpen = body.style.display === 'block';
+      body.style.display = isOpen ? 'none' : 'block';
+      chev.style.transform = isOpen ? '' : 'rotate(180deg)';
+    };
+
+    card.appendChild(hdr);
+    card.appendChild(body);
+    el.appendChild(card);
+  });
 
   renderHistory();
 }
