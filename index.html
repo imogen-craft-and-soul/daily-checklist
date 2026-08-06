@@ -438,7 +438,7 @@ function renderToday() {
   const dateStr = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
   const msgs = hour < 12
     ? ['Hope you have a wonderful day in the shop!','Ready to create something lovely today?','A tidy shop is a happy shop.','Another day, another chance to make something beautiful.']
-    : ['Afternoon energy — let\'s power through.','Great work so far today!','Almost there — finish the day strong!'];
+    : ['Afternoon energy — let's power through.','Great work so far today!','Almost there — finish the day strong!'];
   const msg = msgs[now.getDate() % msgs.length];
 
   // Booking summary for today
@@ -452,32 +452,32 @@ function renderToday() {
       const peak = Math.max(...Object.values(slots));
       const peakEntry = Object.entries(slots).find(([,v])=>v===peak);
       const peakLabel = peakEntry ? formatTime(peakEntry[0].split('|')[0]) : null;
-      bookingSentence = \`<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">🎨 \${dayGroups.length} group\${dayGroups.length!==1?'s':''} · \${total} crafter\${total!==1?'s':''} today\${peak>=15?\` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at \${peakLabel}</span>\`:''}</div>\`;
+      bookingSentence = `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">🎨 ${dayGroups.length} group${dayGroups.length!==1?'s':''} · ${total} crafter${total!==1?'s':''} today${peak>=15?` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at ${peakLabel}</span>`:''}</div>`;
     }
   }
 
   // Hero
   const hero = document.createElement('div');
   hero.style.cssText = 'margin-bottom:16px;';
-  hero.innerHTML = \`
-    <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:4px;">\${dateStr}</div>
-    <div style="font-size:24px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:6px;">\${greeting} 👋</div>
-    <div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">\${msg}</div>
-    \${bookingSentence}\`;
+  hero.innerHTML = `
+    <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:4px;">${dateStr}</div>
+    <div style="font-size:24px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:6px;">${greeting} 👋</div>
+    <div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">${msg}</div>
+    ${bookingSentence}`;
   el.appendChild(hero);
 
   // Shop Open
   const isOpen = !!shopOpen[dk];
   const openEl = document.createElement('div');
-  openEl.style.cssText = \`background:\${isOpen?'#FFFDF0':'#fff'};border:\${isOpen?'2px solid #D4AA00':'1px solid var(--ink-faint)'};border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;\`;
-  openEl.innerHTML = \`
-    <div style="width:28px;height:28px;border-radius:50%;border:2px solid \${isOpen?'#D4AA00':'var(--ink-faint)'};background:\${isOpen?'#D4AA00':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
-      \${isOpen?'<svg viewBox="0 0 12 12" fill="none" width="13" height="13"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+  openEl.style.cssText = `background:${isOpen?'#FFFDF0':'#fff'};border:${isOpen?'2px solid #D4AA00':'1px solid var(--ink-faint)'};border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;`;
+  openEl.innerHTML = `
+    <div style="width:28px;height:28px;border-radius:50%;border:2px solid ${isOpen?'#D4AA00':'var(--ink-faint)'};background:${isOpen?'#D4AA00':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
+      ${isOpen?'<svg viewBox="0 0 12 12" fill="none" width="13" height="13"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
     </div>
     <div>
       <div style="font-size:15px;font-weight:500;color:var(--ink);">☀️ Shop open</div>
-      \${isOpen?'<div style="font-size:12px;color:#92700A;margin-top:2px;">Open for business!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you\'re open</div>'}
-    </div>\`;
+      ${isOpen?'<div style="font-size:12px;color:#92700A;margin-top:2px;">Open for business!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you're open</div>'}
+    </div>`;
   openEl.onclick = () => { shopOpen[dk]=!shopOpen[dk]; save(); if(shopOpen[dk]) launchSunshine(); renderToday(); };
   el.appendChild(openEl);
 
@@ -487,24 +487,24 @@ function renderToday() {
   const taskWrap = document.createElement('div');
   taskWrap.style.cssText = 'background:#F0FAF3;border:1px solid #C0E8CC;border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
   const hdrBorder = tasks.length ? 'border-bottom:1px solid #C0E8CC;' : '';
-  taskWrap.innerHTML = \`<div style="padding:12px 14px 10px;\${hdrBorder}">
+  taskWrap.innerHTML = `<div style="padding:12px 14px 10px;${hdrBorder}">
     <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
       <div style="font-size:15px;font-weight:500;color:var(--ink);">Today's big things</div>
-      \${tasks.length?\`<span style="font-size:12px;color:var(--ink-mid);">\${doneCount}/\${tasks.length}</span>\`:''}
+      ${tasks.length?`<span style="font-size:12px;color:var(--ink-mid);">${doneCount}/${tasks.length}</span>`:''}
     </div>
     <div style="font-size:12px;color:var(--ink-mid);">What are the most important things today?</div>
-  </div>\`;
+  </div>`;
 
   const taskList = document.createElement('div');
   tasks.forEach(t => {
     const row = document.createElement('div');
     row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid #C0E8CC;background:#fff;cursor:pointer;';
-    const delId = t.id.replace(/'/g,"\\'");
-    row.innerHTML = \`
-      <div style="width:22px;height:22px;border-radius:50%;border:2px solid \${t.done?'var(--green)':'var(--ink-faint)'};background:\${t.done?'var(--green)':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">
-        \${t.done?'<svg viewBox="0 0 12 12" fill="none" width="11" height="11"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+
+    row.innerHTML = `
+      <div style="width:22px;height:22px;border-radius:50%;border:2px solid ${t.done?'var(--green)':'var(--ink-faint)'};background:${t.done?'var(--green)':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">
+        ${t.done?'<svg viewBox="0 0 12 12" fill="none" width="11" height="11"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
       </div>
-      <div style="flex:1;font-size:14px;color:\${t.done?'var(--ink-mid)':'var(--ink)'};\${t.done?'text-decoration:line-through;opacity:0.5;':''}line-height:1.35;">\${t.name}</div>\`;
+      <div style="flex:1;font-size:14px;color:${t.done?'var(--ink-mid)':'var(--ink)'};${t.done?'text-decoration:line-through;opacity:0.5;':''}line-height:1.35;">${t.name}</div>`;
     const delBtn = document.createElement('button');
     delBtn.textContent = '×';
     delBtn.style.cssText = 'background:none;border:none;font-size:18px;color:var(--ink-faint);cursor:pointer;padding:2px 4px;line-height:1;touch-action:manipulation;';
@@ -534,15 +534,15 @@ function renderToday() {
   // Shop Closed
   const isClosed = !!shopClosed[dk];
   const closedEl = document.createElement('div');
-  closedEl.style.cssText = \`background:\${isClosed?'#F0F5FF':'#fff'};border:\${isClosed?'2px solid #6B8FD4':'1px solid var(--ink-faint)'};border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;\`;
-  closedEl.innerHTML = \`
-    <div style="width:28px;height:28px;border-radius:50%;border:2px solid \${isClosed?'#6B8FD4':'var(--ink-faint)'};background:\${isClosed?'#6B8FD4':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
-      \${isClosed?'<svg viewBox="0 0 12 12" fill="none" width="13" height="13"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+  closedEl.style.cssText = `background:${isClosed?'#F0F5FF':'#fff'};border:${isClosed?'2px solid #6B8FD4':'1px solid var(--ink-faint)'};border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;`;
+  closedEl.innerHTML = `
+    <div style="width:28px;height:28px;border-radius:50%;border:2px solid ${isClosed?'#6B8FD4':'var(--ink-faint)'};background:${isClosed?'#6B8FD4':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
+      ${isClosed?'<svg viewBox="0 0 12 12" fill="none" width="13" height="13"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
     </div>
     <div>
       <div style="font-size:15px;font-weight:500;color:var(--ink);">🌙 Shop closed</div>
-      \${isClosed?'<div style="font-size:12px;color:#4A6BAA;margin-top:2px;">Closed up — great work today!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you\'re done for the day</div>'}
-    </div>\`;
+      ${isClosed?'<div style="font-size:12px;color:#4A6BAA;margin-top:2px;">Closed up — great work today!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you're done for the day</div>'}
+    </div>`;
   closedEl.onclick = () => { shopClosed[dk]=!shopClosed[dk]; save(); if(shopClosed[dk]) launchMoon(); renderToday(); };
   el.appendChild(closedEl);
 
@@ -550,7 +550,7 @@ function renderToday() {
   const n = notes[dk] || {};
   const notesWrap = document.createElement('div');
   notesWrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);overflow:hidden;';
-  notesWrap.innerHTML = \`
+  notesWrap.innerHTML = `
     <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayNotes(this)">
       <div style="font-size:14px;font-weight:500;color:var(--ink);">Notes</div>
       <span style="font-size:11px;color:var(--ink-mid);" class="notes-chev">▼</span>
@@ -558,12 +558,12 @@ function renderToday() {
     <div id="today-notes-inner" style="padding:12px 14px;">
       <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
         <div style="font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);">Rate the day</div>
-        <div style="display:flex;gap:3px;">\${[1,2,3,4,5].map(i=>\`<span onclick="setRatingToday(\${i})" style="font-size:22px;cursor:pointer;color:\${(n.rating||0)>=i?'#F5C842':'var(--ink-faint)'};">★</span>\`).join('')}</div>
+        <div style="display:flex;gap:3px;">${[1,2,3,4,5].map(i=>`<span onclick="setRatingToday(${i})" style="font-size:22px;cursor:pointer;color:${(n.rating||0)>=i?'#F5C842':'var(--ink-faint)'};">★</span>`).join('')}</div>
       </div>
-      <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What went well</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('well',this.value)">\${n.well||''}</textarea></div>
-      <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What could be improved</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('improve',this.value)">\${n.improve||''}</textarea></div>
-      <div><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">Ideas &amp; shopping list</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('ideas',this.value)">\${n.ideas||''}</textarea></div>
-    </div>\`;
+      <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What went well</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('well',this.value)">${n.well||''}</textarea></div>
+      <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What could be improved</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('improve',this.value)">${n.improve||''}</textarea></div>
+      <div><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">Ideas &amp; shopping list</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('ideas',this.value)">${n.ideas||''}</textarea></div>
+    </div>`;
   el.appendChild(notesWrap);
 }
 
