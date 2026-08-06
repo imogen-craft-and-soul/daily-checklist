@@ -243,6 +243,7 @@ const TASKS = [
 let shopOpen = {};   // {dateKey: bool}
 let shopClosed = {}; // {dateKey: bool}
 let dailyTasks = {}; // {dateKey: [{id, name, done}]}
+let selectedDateOffset = 0; // 0 = today, +1 = tomorrow, -1 = yesterday
 let notes = {};      // {dateKey: {well, improve, ideas, rating}}
 let crafters = {};   // kept for bookings tab crafter count
 
@@ -390,35 +391,41 @@ function startRealtimeSync() {
 // ── TODAY HELPERS ────────────────────────────────────────────────────────────
 function todayKey() { return new Date().toISOString().split('T')[0]; }
 
+function selectedDk() {
+  const d = new Date();
+  d.setDate(d.getDate() + selectedDateOffset);
+  return d.toISOString().split('T')[0];
+}
+
 function addDailyTask(name) {
   if (!name.trim()) return;
-  const dk = todayKey();
+  const dk = selectedDk();
   if (!dailyTasks[dk]) dailyTasks[dk] = [];
   dailyTasks[dk].push({ id: Date.now().toString(), name: name.trim(), done: false });
   save(); renderToday();
 }
 
 function toggleDailyTask(id) {
-  const dk = todayKey();
+  const dk = selectedDk();
   const t = (dailyTasks[dk]||[]).find(t => t.id === id);
   if (t) { t.done = !t.done; save(); renderToday(); }
 }
 
 function deleteDailyTask(id) {
-  const dk = todayKey();
+  const dk = selectedDk();
   dailyTasks[dk] = (dailyTasks[dk]||[]).filter(t => t.id !== id);
   save(); renderToday();
 }
 
 function saveTodayNote(field, val) {
-  const dk = todayKey();
+  const dk = selectedDk();
   if (!notes[dk]) notes[dk] = {};
   notes[dk][field] = val;
   save();
 }
 
 function setRatingToday(val) {
-  const dk = todayKey();
+  const dk = selectedDk();
   if (!notes[dk]) notes[dk] = {};
   notes[dk].rating = notes[dk].rating === val ? 0 : val;
   save(); renderToday();
@@ -428,20 +435,27 @@ function renderStaff() { renderToday(); }
 
 // ── RENDER: TODAY VIEW ────────────────────────────────────────────────────────
 function renderToday() {
-  const dk = todayKey();
+  // Date based on offset
+  const baseDate = new Date();
+  baseDate.setDate(baseDate.getDate() + selectedDateOffset);
+  const dk = baseDate.toISOString().split('T')[0];
+  const isToday = selectedDateOffset === 0;
+
   const el = document.getElementById('today-content');
   el.innerHTML = '';
 
   const now = new Date();
   const hour = now.getHours();
-  const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const dateStr = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
+  const greeting = isToday
+    ? (hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening')
+    : selectedDateOffset > 0 ? 'Planning ahead' : 'Looking back';
+  const dateStr = baseDate.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
   const msgs = hour < 12
     ? ['Hope you have a wonderful day in the shop!','Ready to create something lovely today?','A tidy shop is a happy shop.','Another day, another chance to make something beautiful.']
     : ['Afternoon energy — push through!','Great work so far today!','Almost there — finish strong!'];
-  const msg = msgs[now.getDate() % msgs.length];
+  const msg = isToday ? msgs[now.getDate() % msgs.length] : '';
 
-  // Booking summary for today
+  // Booking summary for selected date
   let bookingSentence = '';
   if (cachedBookingGroups) {
     const dayGroups = cachedBookingGroups.filter(g => g.startTime.startsWith(dk));
@@ -456,13 +470,24 @@ function renderToday() {
     }
   }
 
+  // Date nav
+  const navEl = document.createElement('div');
+  navEl.style.cssText = 'display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;';
+  navEl.innerHTML = `
+    <button onclick="selectedDateOffset=Math.max(-1,selectedDateOffset-1);renderToday();" style="width:34px;height:34px;border-radius:50%;border:1.5px solid var(--ink-faint);background:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;${selectedDateOffset<=-1?'opacity:0.3;pointer-events:none;':''}">‹</button>
+    <div style="text-align:center;">
+      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);">${isToday?'Today':selectedDateOffset===1?'Tomorrow':selectedDateOffset===-1?'Yesterday':dateStr}</div>
+      <div style="font-size:13px;color:var(--ink-mid);">${dateStr}</div>
+    </div>
+    <button onclick="selectedDateOffset=Math.min(6,selectedDateOffset+1);renderToday();" style="width:34px;height:34px;border-radius:50%;border:1.5px solid var(--ink-faint);background:#fff;font-size:16px;cursor:pointer;display:flex;align-items:center;justify-content:center;touch-action:manipulation;${selectedDateOffset>=6?'opacity:0.3;pointer-events:none;':''}">›</button>`;
+  el.appendChild(navEl);
+
   // Hero
   const hero = document.createElement('div');
   hero.style.cssText = 'margin-bottom:16px;';
   hero.innerHTML = `
-    <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:4px;">${dateStr}</div>
     <div style="font-size:24px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:6px;">${greeting} 👋</div>
-    <div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">${msg}</div>
+    ${msg ? `<div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">${msg}</div>` : ''}
     ${bookingSentence}`;
   el.appendChild(hero);
 
