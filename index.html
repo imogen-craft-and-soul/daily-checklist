@@ -237,60 +237,15 @@ const TASKS = [
   {name:'Storeroom - organise bubble wrap', day:'Fri', priority:'P2', time:'20 mins', type:'Organise', freq:'Weekly'},
 ];
 
-const OC_TASKS = {
-  opening: [
-    'Lights on',
-    'Music on',
-    'Check bookings for today',
-    'Check tables are clean and tidy',
-    'Check front shelves are tidy',
-    'Check bathroom is tidy',
-    'Water jugs filled',
-    'Mugs and cups laid out',
-    'Refill paint brush rack',
-    'Drying rack emptied',
-    'Prop door open',
-    'Sign out',
-  ],
-  closing: [
-    'All washing up done',
-    'Pottery bubble wrapped',
-    'Tables wiped down',
-    'Pen pots on tables organised',
-    'Any mess on the floor tidied up',
-    'Corks off the water jugs',
-    'Take bins out',
-    'Lights off',
-    'Music off',
-    'Bring sign in',
-    'Door locked',
-  ]
-};
 
-const DAYS = ['Tue','Wed','Thu','Fri','Sat','Sun'];
-const CATCHUP_DAYS = new Set(['Sat','Sun']);
-const CATCHUP_SOURCES = {
-  Sat: ['Tue','Wed','Thu','Fri'],
-  Sun: ['Tue','Wed','Thu','Fri'],
-};
 
 // ── STATE ─────────────────────────────────────────────────────────────────────
-let checked = {};
-let crafters = {Tue:0, Wed:0, Thu:0, Fri:0, Sat:0, Sun:0};
-let notes = {};
-let ocChecked = {};
-let customTasks = {}; // {day: [{id, name, priority, done}]}
+let shopOpen = {};   // {dateKey: bool}
+let shopClosed = {}; // {dateKey: bool}
+let dailyTasks = {}; // {dateKey: [{id, name, done}]}
+let notes = {};      // {dateKey: {well, improve, ideas, rating}}
+let crafters = {};   // kept for bookings tab crafter count
 
-let selectedDay = (()=>{
-  const d = new Date().getDay();
-  if (d===2) return 'Tue';
-  if (d===3) return 'Wed';
-  if (d===4) return 'Thu';
-  if (d===5) return 'Fri';
-  if (d===6) return 'Sat';
-  if (d===0) return 'Sun';
-  return 'Wed';
-})();
 
 // ── SUPABASE SYNC ─────────────────────────────────────────────────────────────
 let saveTimer = null;
@@ -304,11 +259,11 @@ async function loadFromSupabase() {
     const rows = await res.json();
     console.log('Supabase load:', rows?.length, 'rows', rows?.[0] ? 'has data' : 'empty');
     if (rows && rows[0]) {
-      checked      = rows[0].checked      || {};
-      crafters     = rows[0].crafters     || {Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0};
-      notes        = rows[0].notes        || {};
-      ocChecked    = rows[0].oc_checked   || {};
-      customTasks  = rows[0].custom_tasks || {};
+      shopOpen    = rows[0].shop_open    || {};
+      shopClosed  = rows[0].shop_closed  || {};
+      dailyTasks  = rows[0].daily_tasks  || {};
+      notes       = rows[0].notes        || {};
+      crafters    = rows[0].crafters     || {};
     }
     // If rows is empty array, row doesn't exist yet — that's fine, start fresh
   } catch(e) {
@@ -332,8 +287,8 @@ async function persistToSupabase() {
       },
       body: JSON.stringify({
         id: ROW_ID,
-        checked, crafters, notes, oc_checked: ocChecked,
-        custom_tasks: customTasks,
+        shop_open: shopOpen, shop_closed: shopClosed,
+        daily_tasks: dailyTasks, notes, crafters,
         updated_at: new Date().toISOString()
       })
     });
@@ -401,11 +356,11 @@ function startRealtimeSync() {
           // Ignore if we just saved (within 3 seconds) — that's our own change
           if (Date.now() - lastSaveTime < 3000) return;
           // Update state from remote
-          checked     = record.checked      || {};
-          crafters    = record.crafters     || {Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0};
+          shopOpen    = record.shop_open    || {};
+          shopClosed  = record.shop_closed  || {};
+          dailyTasks  = record.daily_tasks  || {};
           notes       = record.notes        || {};
-          ocChecked   = record.oc_checked   || {};
-          customTasks = record.custom_tasks || {};
+          crafters    = record.crafters     || {};
           // Re-render current view
           const activeView = document.querySelector('.view.active')?.id;
           if (activeView === 'today-view') renderToday();
@@ -431,560 +386,185 @@ function startRealtimeSync() {
   window._realtimeLastSave = () => { lastSaveTime = Date.now(); };
 }
 
-function key(day, name) { return day+'::'+name; }
-function ocKey(day, type, task) { return day+'::'+type+'::'+task; }
 
-function progressColor(pct) {
-  if (pct <= 50) { const g = Math.round(113 + (pct/50)*(190-113)); return `rgb(196,${g},74)`; }
-  if (pct < 100) {
-    const r = Math.round(196 + ((pct-50)/50)*(42-196));
-    const g = Math.round(190 + ((pct-50)/50)*(122-190));
-    const b = Math.round(74  + ((pct-50)/50)*(82-74));
-    return `rgb(${r},${g},${b})`;
-  }
-  return '#2A7A52';
-}
+// ── TODAY HELPERS ────────────────────────────────────────────────────────────
+function todayKey() { return new Date().toISOString().split('T')[0]; }
 
-function typeBadgeClass(type) {
-  if (type==='Pottery delivery') return 'pottery';
-  if (type==='Stock count') return 'stock';
-  return type.toLowerCase();
-}
-
-function isOcComplete(day, type) {
-  return OC_TASKS[type].every(t => ocChecked[ocKey(day, type, t)]);
-}
-
-function tasksForDay(day) {
-  if (!CATCHUP_DAYS.has(day)) return TASKS.filter(t => t.day === day);
-  const sources = CATCHUP_SOURCES[day] || [];
-  const leftover = [];
-  sources.forEach(src => {
-    TASKS.filter(t => t.day === src).forEach(t => {
-      if (!checked[key(src, t.name)]) leftover.push({...t, originalDay: src});
-    });
-  });
-  return leftover;
-}
-
-// ── NOTES & RATINGS ───────────────────────────────────────────────────────────
-function saveNote(field) {
-  if (!notes[selectedDay]) notes[selectedDay] = {};
-  notes[selectedDay][field] = document.getElementById('note-'+field).value;
-  save();
-}
-
-function loadNotes(day) {
-  const n = notes[day] || {};
-  document.getElementById('note-well').value = n.well || '';
-  document.getElementById('note-improve').value = n.improve || '';
-  document.getElementById('note-ideas').value = n.ideas || '';
-  renderStars(n.rating || 0);
-}
-
-function renderStars(rating) {
-  document.querySelectorAll('#starRating .star').forEach((s,i) => s.classList.toggle('active', i < rating));
-}
-
-function setRating(val) {
-  if (!notes[selectedDay]) notes[selectedDay] = {};
-  notes[selectedDay].rating = notes[selectedDay].rating === val ? 0 : val;
-  renderStars(notes[selectedDay].rating);
-  save();
-}
-
-// ── CRAFTERS ──────────────────────────────────────────────────────────────────
-function addCustomTask(day, name, priority) {
+function addDailyTask(name) {
   if (!name.trim()) return;
-  if (!customTasks[day]) customTasks[day] = [];
-  customTasks[day].push({ id: Date.now().toString(), name: name.trim(), priority, done: false });
-  save();
-  renderToday();
+  const dk = todayKey();
+  if (!dailyTasks[dk]) dailyTasks[dk] = [];
+  dailyTasks[dk].push({ id: Date.now().toString(), name: name.trim(), done: false });
+  save(); renderToday();
 }
 
-function toggleCustomTask(day, id) {
-  const t = (customTasks[day]||[]).find(t => t.id === id);
+function toggleDailyTask(id) {
+  const dk = todayKey();
+  const t = (dailyTasks[dk]||[]).find(t => t.id === id);
   if (t) { t.done = !t.done; save(); renderToday(); }
 }
 
-function deleteCustomTask(day, id) {
-  customTasks[day] = (customTasks[day]||[]).filter(t => t.id !== id);
-  save();
-  renderToday();
+function deleteDailyTask(id) {
+  const dk = todayKey();
+  dailyTasks[dk] = (dailyTasks[dk]||[]).filter(t => t.id !== id);
+  save(); renderToday();
 }
 
-function changeCrafters(delta) {
-  crafters[selectedDay] = Math.max(0, (crafters[selectedDay] || 0) + delta);
+function saveTodayNote(field, val) {
+  const dk = todayKey();
+  if (!notes[dk]) notes[dk] = {};
+  notes[dk][field] = val;
   save();
-  const el = document.getElementById('crafterCount');
-  if (el) el.textContent = crafters[selectedDay];
 }
 
-function changeWater(delta) {
-  const k = selectedDay+'_water';
-  const prev = crafters[k] || 0;
-  crafters[k] = Math.max(0, prev + delta);
-  save();
-  const el = document.getElementById('waterCount');
-  if (el) el.textContent = crafters[k];
-  // Confetti at 4 cups
-  if (crafters[k] === 6 && prev < 6) launchConfetti();
-  // Update the overview row text
-  renderToday();
+function setRatingToday(val) {
+  const dk = todayKey();
+  if (!notes[dk]) notes[dk] = {};
+  notes[dk].rating = notes[dk].rating === val ? 0 : val;
+  save(); renderToday();
 }
 
-// ── NAVIGATION ────────────────────────────────────────────────────────────────
-function switchView(v) {
-  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
-  document.querySelectorAll('.nav-btn').forEach(el => el.classList.remove('active'));
-  document.getElementById(v+'-view').classList.add('active');
-  event.currentTarget.classList.add('active');
-  if (v==='manager') { renderManager(); }
-  if (v==='today') { renderToday(); }
-  if (v==='bookings') { renderBookings(); }
-}
+function renderStaff() { renderToday(); }
 
 // ── RENDER: TODAY VIEW ────────────────────────────────────────────────────────
 function renderToday() {
-  const day = selectedDay;
-  const dayFullNames = {Tue:'Tuesday', Wed:'Wednesday', Thu:'Thursday', Fri:'Friday', Sat:'Saturday', Sun:'Sunday'};
+  const dk = todayKey();
   const el = document.getElementById('today-content');
   el.innerHTML = '';
 
-  // Day selector tabs
-  const tabsEl = document.createElement('div');
-  tabsEl.style.cssText = 'display:flex;gap:5px;margin-bottom:14px;';
-  DAYS.forEach(d => {
-    const btn = document.createElement('button');
-    const isCatchupTab = CATCHUP_DAYS.has(d);
-    const leftover = isCatchupTab ? tasksForDay(d).length : 0;
-    const regularTasks = !isCatchupTab ? TASKS.filter(t=>t.day===d).length : 0;
-    const doneTasks2 = !isCatchupTab ? TASKS.filter(t=>t.day===d&&checked[key(d,t.name)]).length : 0;
-    const allDone = !isCatchupTab && doneTasks2===regularTasks && regularTasks>0;
-
-    // Booking count for this day
-    const dDate = new Date(); // approximate — find the date for tab day d
-    let tabBookings = 0;
-    if (cachedBookingGroups) {
-      // Find next occurrence of this weekday in cached data
-      cachedBookingGroups.forEach(g => {
-        const gDay = new Date(g.startTime).toLocaleDateString('en-GB',{weekday:'short'}).slice(0,3);
-        const dayMap = {Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'};
-        if (gDay === d) tabBookings += g.count;
-      });
-    }
-
-    let subText;
-    if (isCatchupTab) {
-      subText = leftover === 0 ? '✓ clear' : leftover + ' left';
-    } else if (allDone) {
-      subText = '✓ done';
-    } else {
-      subText = doneTasks2 + '/' + regularTasks;
-    }
-    if (tabBookings > 0) subText += ' · ' + tabBookings + '👥';
-
-    btn.style.cssText = `flex:1;padding:7px 2px;font-size:12px;font-weight:500;border:1.5px solid ${d===selectedDay?'var(--ink)':'var(--ink-faint)'};border-radius:var(--radius-sm);background:${d===selectedDay?'var(--ink)':'var(--white)'};color:${d===selectedDay?'#fff':'var(--ink-mid)'};cursor:pointer;text-align:center;`;
-    btn.innerHTML = `${d}<span style="display:block;font-size:9px;font-weight:400;margin-top:1px;opacity:0.8;">${subText}</span>`;
-    btn.onclick = () => { selectedDay=d; renderToday(); };
-    tabsEl.appendChild(btn);
-  });
-  el.appendChild(tabsEl);
   const now = new Date();
   const hour = now.getHours();
   const greeting = hour < 12 ? 'Good morning' : hour < 17 ? 'Good afternoon' : 'Good evening';
-  const dateStr = now.toLocaleDateString('en-GB',{weekday:'long', day:'numeric', month:'long'});
+  const dateStr = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
+  const msgs = hour < 12
+    ? ['Hope you have a wonderful day in the shop!','Ready to create something lovely today?','A tidy shop is a happy shop.','Another day, another chance to make something beautiful.']
+    : ['Afternoon energy — let\'s power through.','Great work so far today!','Almost there — finish the day strong!'];
+  const msg = msgs[now.getDate() % msgs.length];
 
-  const morningMessages = [
-    'Hope you have a wonderful day in the shop!',
-    'The shop looks great — let\'s make it even better.',
-    'Another day, another chance to make something beautiful.',
-    'You\'ve got this. Let\'s have a brilliant day.',
-    'Ready to create something lovely today?',
-    'A tidy shop is a happy shop. Let\'s go!',
-  ];
-  const afternoonMessages = [
-    'Afternoon energy — let\'s power through.',
-    'The shop is in great hands this afternoon.',
-    'Almost there — finish the day strong!',
-    'Great work so far today!',
-  ];
-  const messages = hour < 12 ? morningMessages : afternoonMessages;
-  const message = messages[now.getDate() % messages.length];
-
-  // Task summary counts by type
-  const isCatchup = CATCHUP_DAYS.has(selectedDay);
-  const todayTasks = isCatchup ? [] : TASKS.filter(t => t.day === selectedDay);
-  const totalTasks = todayTasks.length;
-  const doneTasks = todayTasks.filter(t => checked[key(selectedDay, t.name)]).length;
-
-  const typeOrder = {'Pottery delivery':0,'Clean':1,'Organise':2,'Stock count':3,'Garden':4};
-  const typeEmojis = {
-    'Pottery delivery': '🏺',
-    'Clean':            '🧹',
-    'Organise':         '📦',
-    'Stock count':      '📋',
-    'Garden':           '🌿',
-  };
-  const typeColors = {
-    'Pottery delivery': {bg:'#FDF0DC', color:'#B8710A'},
-    'Clean':            {bg:'#E8F0FB', color:'#2A5BA8'},
-    'Organise':         {bg:'#E4F2EB', color:'#2A7A52'},
-    'Stock count':      {bg:'#EEE8FB', color:'#4A3AA8'},
-    'Garden':           {bg:'#FEF9E0', color:'#92700A'},
-  };
-
-  const typeCounts = {};
-  const typeDone = {};
-  todayTasks.forEach(t => {
-    typeCounts[t.type] = (typeCounts[t.type]||0) + 1;
-    if (checked[key(selectedDay, t.name)]) typeDone[t.type] = (typeDone[t.type]||0) + 1;
-  });
-
-  const n = notes[selectedDay] || {};
-  const notesAndRatingDone = !!(n.rating || n.well || n.improve || n.ideas);
-  const ocOpenDone  = isOcComplete(day, 'opening');
-  const ocCloseDone = isOcComplete(day, 'closing');
-  const waterCount  = (crafters[selectedDay+'_water'] || 0);
-  const WATER_GOAL  = 6;
-
-  function typeRowHTML(type, total) {
-    const done = typeDone[type] || 0;
-    const allDone = done === total;
-    const c = typeColors[type] || {bg:'var(--ink-faint)', color:'var(--ink-mid)'};
-    const emoji = typeEmojis[type] || '•';
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:15px;line-height:1;">${emoji}</span>
-        <div style="font-size:13px;color:${allDone?'var(--ink-mid)':'var(--ink)'};${allDone?'text-decoration:line-through;':''}">${type}</div>
-      </div>
-      <div style="font-size:12px;color:${allDone?'var(--green)':'var(--ink-mid)'};font-weight:${allDone?'500':'400'};">${allDone?'✓':done+'/'+total}</div>
-    </div>`;
-  }
-  function statusRowHTML(emoji, label, done) {
-    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
-      <div style="display:flex;align-items:center;gap:8px;">
-        <span style="font-size:15px;line-height:1;">${emoji}</span>
-        <div style="font-size:13px;color:${done?'var(--ink-mid)':'var(--ink)'};${done?'text-decoration:line-through;':''}">${label}</div>
-      </div>
-      <div style="font-size:12px;color:${done?'var(--green)':'var(--ink-mid)'};font-weight:${done?'500':'400'};">${done?'✓':'—'}</div>
-    </div>`;
-  }
-
-  const typeRowsHTML = Object.entries(typeCounts)
-    .sort((a,b) => (typeOrder[a[0]]??99)-(typeOrder[b[0]]??99))
-    .map(([type, count]) => typeRowHTML(type, count))
-    .join('');
-
-  // Booking summary — use the actual date for the selected day
-  const selectedDateKey = (() => {
-    if (!cachedBookingGroups || !cachedBookingGroups.length) return null;
-    // Find the date in cached data that matches selectedDay's weekday
-    const dayMap = {Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0};
-    const targetWd = dayMap[selectedDay];
-    const match = cachedBookingGroups.find(g => new Date(g.startTime).getDay() === targetWd);
-    return match ? match.startTime.split('T')[0] : null;
-  })();
-
-  let bookingSummary = null;
-  if (selectedDateKey && cachedBookingGroups) {
-    const dayGroups = cachedBookingGroups.filter(g => g.startTime.startsWith(selectedDateKey));
+  // Booking summary for today
+  let bookingSentence = '';
+  if (cachedBookingGroups) {
+    const dayGroups = cachedBookingGroups.filter(g => g.startTime.startsWith(dk));
     if (dayGroups.length) {
-      const totalBookingCrafters = dayGroups.reduce((s,g) => s+g.count, 0);
+      const total = dayGroups.reduce((s,g)=>s+g.count,0);
       const slots = {};
       dayGroups.forEach(g => { const sk=slotKey(g); slots[sk]=(slots[sk]||0)+g.count; });
-      const peakCount = Math.max(...Object.values(slots));
-      const peakTime = Object.entries(slots).find(([,v])=>v===peakCount);
-      const peakLabel = peakTime ? formatTime(peakTime[0].split('|')[0]) : null;
-      bookingSummary = {total:dayGroups.length, crafters:totalBookingCrafters, peak:peakCount, peakTime:peakLabel};
+      const peak = Math.max(...Object.values(slots));
+      const peakEntry = Object.entries(slots).find(([,v])=>v===peak);
+      const peakLabel = peakEntry ? formatTime(peakEntry[0].split('|')[0]) : null;
+      bookingSentence = \`<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">🎨 \${dayGroups.length} group\${dayGroups.length!==1?'s':''} · \${total} crafter\${total!==1?'s':''} today\${peak>=15?\` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at \${peakLabel}</span>\`:''}</div>\`;
     }
   }
 
-  const bookingSentence = bookingSummary
-    ? `<div style="font-size:14px;color:var(--ink-mid);line-height:1.6;margin-top:6px;">🎨 ${bookingSummary.total} group${bookingSummary.total!==1?'s':''} · ${bookingSummary.crafters} crafter${bookingSummary.crafters!==1?'s':''} today${bookingSummary.peak>=15?` · <span style="color:#993C1D;font-weight:500;">🔥 Busy at ${bookingSummary.peakTime}</span>`:''}</div>`
-    : '';
-
-  const thuLeftover = isCatchup ? tasksForDay(selectedDay) : [];
-  const catchupSources = (CATCHUP_SOURCES[selectedDay]||[]).join(' & ');
-
-  const catchupLeftoverHTML = isCatchup ? typeRowHTML('↩ Leftover tasks', thuLeftover.length, {bg:'var(--amber-light)',color:'var(--amber)'}, thuLeftover.length) : '';
-
+  // Hero
   const hero = document.createElement('div');
   hero.style.cssText = 'margin-bottom:16px;';
-  hero.innerHTML = `
-    <div style="margin-bottom:14px;">
-      <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:4px;">${dateStr}</div>
-      <div style="font-size:24px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:6px;">${greeting} 👋</div>
-      <div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">${message}</div>
-      ${bookingSentence}
-    </div>
-    <div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 14px;margin-bottom:12px;">
-      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-        <div style="font-size:13px;font-weight:500;color:var(--ink);">Today's overview</div>
-        ${isCatchup
-          ? `<div style="font-size:12px;color:${thuLeftover.length===0?'var(--green)':'var(--amber)'};">${thuLeftover.length===0?'All clear!':thuLeftover.length+' task'+(thuLeftover.length>1?'s':'')+' left over'}</div>`
-          : `<div style="font-size:12px;color:var(--ink-mid);">${doneTasks}/${totalTasks} done</div>`}
-      </div>
-      ${!isCatchup ? `<div style="background:var(--ink-faint);border-radius:99px;height:4px;overflow:hidden;margin-bottom:12px;">
-        <div style="height:100%;border-radius:99px;background:${progressColor(totalTasks?Math.round(doneTasks/totalTasks*100):0)};width:${totalTasks?Math.round(doneTasks/totalTasks*100):0}%;transition:width 0.4s;"></div>
-      </div>` : ''}
-      ${statusRowHTML('🌅', 'Open', ocOpenDone)}
-      ${isCatchup
-        ? `<div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
-            <div style="display:flex;align-items:center;gap:8px;">
-              <span style="font-size:15px;line-height:1;">↩</span>
-              <div style="font-size:13px;color:${thuLeftover.length===0?'var(--ink-mid)':'var(--ink)'};${thuLeftover.length===0?'text-decoration:line-through;':''}">Leftover tasks from ${catchupSources}</div>
-            </div>
-            <div style="font-size:12px;color:${thuLeftover.length===0?'var(--green)':'var(--ink-mid)'};">${thuLeftover.length===0?'✓':''+thuLeftover.length+' left'}</div>
-          </div>`
-        : typeRowsHTML}
-      ${statusRowHTML('🌙', 'Close', ocCloseDone)}
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:0.5px solid var(--ink-faint);">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:15px;line-height:1;">💧</span>
-          <div style="font-size:13px;color:var(--ink);">Drink water</div>
-        </div>
-        <div style="font-size:12px;color:${waterCount>=WATER_GOAL?'var(--green)':'var(--ink-mid)'};">${waterCount>=WATER_GOAL?'✓ Hydrated!':waterCount+'/'+WATER_GOAL+' cups'}</div>
-      </div>
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:5px 0;">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:15px;line-height:1;">⭐</span>
-          <div style="font-size:13px;color:${notesAndRatingDone?'var(--ink-mid)':'var(--ink)'};${notesAndRatingDone?'text-decoration:line-through;':''}">Rating &amp; notes</div>
-        </div>
-        <div style="font-size:12px;color:${notesAndRatingDone?'var(--green)':'var(--ink-mid)'};font-weight:${notesAndRatingDone?'500':'400'};">${notesAndRatingDone?'✓':'—'}</div>
-      </div>
-    </div>
-    <div style="display:flex;gap:8px;margin-bottom:4px;">
-      <div style="flex:1;background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:12px;color:var(--ink-mid);">Crafters</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button onclick="changeCrafters(-1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
-          <div id="crafterCount" style="font-size:16px;font-weight:600;min-width:18px;text-align:center;">${crafters[selectedDay]||0}</div>
-          <button onclick="changeCrafters(1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
-        </div>
-      </div>
-      <div style="flex:1;background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:10px 12px;display:flex;align-items:center;justify-content:space-between;">
-        <div style="font-size:12px;color:var(--ink-mid);">💧 Water</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <button onclick="changeWater(-1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">−</button>
-          <div id="waterCount" style="font-size:16px;font-weight:600;min-width:18px;text-align:center;">${waterCount}</div>
-          <button onclick="changeWater(1)" style="width:26px;height:26px;border-radius:50%;border:1.5px solid var(--ink-faint);background:var(--bg);font-size:15px;cursor:pointer;display:flex;align-items:center;justify-content:center;">+</button>
-        </div>
-      </div>
-    </div>`;
+  hero.innerHTML = \`
+    <div style="font-size:11px;font-weight:600;letter-spacing:0.08em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:4px;">\${dateStr}</div>
+    <div style="font-size:24px;font-weight:600;color:var(--ink);line-height:1.2;margin-bottom:6px;">\${greeting} 👋</div>
+    <div style="font-size:14px;color:var(--ink-mid);line-height:1.5;">\${msg}</div>
+    \${bookingSentence}\`;
   el.appendChild(hero);
 
-  // Helper: build an OC section
-  function buildOcSection(type, label, color, dotColor) {
-    const tasks = OC_TASKS[type];
-    const done = tasks.filter(t => ocChecked[ocKey(day, type, t)]).length;
-    const pct = Math.round(done/tasks.length*100);
-    const allDone = done === tasks.length;
-    const wrap = document.createElement('div');
-    const sectionBg = type === 'opening' ? '#FFFDF0' : '#F0F5FF';
-    const dotCol    = type === 'opening' ? '#D4AA00' : '#6B8FD4';
-    wrap.style.cssText = `background:${sectionBg};border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;`;
-    const statusBadge = allDone
-      ? `<span style="font-size:12px;font-weight:500;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:99px;">✓ Complete</span>`
-      : `<span style="font-size:12px;color:var(--ink-mid);">${done}/${tasks.length}</span>`;
-    wrap.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;" onclick="this.closest('[data-oc]').classList.toggle('exp-oc')">
-        <div style="display:flex;align-items:center;gap:8px;">
-          <div style="width:9px;height:9px;border-radius:50%;background:${dotCol};flex-shrink:0;"></div>
-          <div style="font-size:14px;font-weight:500;color:var(--ink);">${label}</div>
-        </div>
-        <div style="display:flex;align-items:center;gap:8px;">${statusBadge}<span style="font-size:11px;color:var(--ink-mid);transition:transform 0.2s;" class="oc-chev-today">▼</span></div>
+  // Shop Open
+  const isOpen = !!shopOpen[dk];
+  const openEl = document.createElement('div');
+  openEl.style.cssText = \`background:\${isOpen?'#FFFDF0':'#fff'};border:\${isOpen?'2px solid #D4AA00':'1px solid var(--ink-faint)'};border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;\`;
+  openEl.innerHTML = \`
+    <div style="width:28px;height:28px;border-radius:50%;border:2px solid \${isOpen?'#D4AA00':'var(--ink-faint)'};background:\${isOpen?'#D4AA00':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
+      \${isOpen?'<svg viewBox="0 0 12 12" fill="none" width="13" height="13"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+    </div>
+    <div>
+      <div style="font-size:15px;font-weight:500;color:var(--ink);">☀️ Shop open</div>
+      \${isOpen?'<div style="font-size:12px;color:#92700A;margin-top:2px;">Open for business!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you\'re open</div>'}
+    </div>\`;
+  openEl.onclick = () => { shopOpen[dk]=!shopOpen[dk]; save(); if(shopOpen[dk]) launchSunshine(); renderToday(); };
+  el.appendChild(openEl);
+
+  // Today tasks
+  const tasks = dailyTasks[dk] || [];
+  const doneCount = tasks.filter(t=>t.done).length;
+  const taskWrap = document.createElement('div');
+  taskWrap.style.cssText = 'background:#F0FAF3;border:1px solid #C0E8CC;border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
+  const hdrBorder = tasks.length ? 'border-bottom:1px solid #C0E8CC;' : '';
+  taskWrap.innerHTML = \`<div style="padding:12px 14px 10px;\${hdrBorder}">
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:2px;">
+      <div style="font-size:15px;font-weight:500;color:var(--ink);">Today's big things</div>
+      \${tasks.length?\`<span style="font-size:12px;color:var(--ink-mid);">\${doneCount}/\${tasks.length}</span>\`:''}
+    </div>
+    <div style="font-size:12px;color:var(--ink-mid);">What are the most important things today?</div>
+  </div>\`;
+
+  const taskList = document.createElement('div');
+  tasks.forEach(t => {
+    const row = document.createElement('div');
+    row.style.cssText = 'display:flex;align-items:center;gap:10px;padding:10px 14px;border-bottom:0.5px solid #C0E8CC;background:#fff;cursor:pointer;';
+    const delId = t.id.replace(/'/g,"\\'");
+    row.innerHTML = \`
+      <div style="width:22px;height:22px;border-radius:50%;border:2px solid \${t.done?'var(--green)':'var(--ink-faint)'};background:\${t.done?'var(--green)':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.15s;">
+        \${t.done?'<svg viewBox="0 0 12 12" fill="none" width="11" height="11"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
       </div>
-      <div class="oc-body-today" style="display:${allDone?'none':'block'};padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
-        <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:8px 0 4px;overflow:hidden;"><div style="height:100%;border-radius:99px;background:${dotCol};width:${pct}%;"></div></div>
-        <div style="font-size:11px;color:var(--ink-mid);margin-bottom:8px;">${done} of ${tasks.length} done</div>
-        <div id="today-oc-${type}"></div>
-      </div>`;
-    wrap.setAttribute('data-oc', type);
-    el.appendChild(wrap);
+      <div style="flex:1;font-size:14px;color:\${t.done?'var(--ink-mid)':'var(--ink)'};\${t.done?'text-decoration:line-through;opacity:0.5;':''}line-height:1.35;">\${t.name}</div>\`;
+    const delBtn = document.createElement('button');
+    delBtn.textContent = '×';
+    delBtn.style.cssText = 'background:none;border:none;font-size:18px;color:var(--ink-faint);cursor:pointer;padding:2px 4px;line-height:1;touch-action:manipulation;';
+    delBtn.onclick = (e) => { e.stopPropagation(); deleteDailyTask(t.id); };
+    row.appendChild(delBtn);
+    row.onclick = () => toggleDailyTask(t.id);
+    taskList.appendChild(row);
+  });
 
-    // Toggle expand/collapse on header click
-    wrap.querySelector('[onclick]').addEventListener('click', function() {
-      const body = wrap.querySelector('.oc-body-today');
-      const chev = wrap.querySelector('.oc-chev-today');
-      body.style.display = body.style.display === 'none' ? 'block' : 'none';
-      chev.style.transform = body.style.display === 'none' ? '' : 'rotate(180deg)';
-    });
+  const addRow = document.createElement('div');
+  addRow.style.cssText = 'padding:10px 14px;display:flex;gap:8px;align-items:center;background:#fff;';
+  const input = document.createElement('input');
+  input.type = 'text';
+  input.placeholder = tasks.length === 0 ? 'Add your first task for today…' : 'Add another task…';
+  input.style.cssText = 'flex:1;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:var(--white);border:1px solid var(--ink-faint);border-radius:var(--radius-sm);outline:none;';
+  const addBtn = document.createElement('button');
+  addBtn.textContent = 'Add';
+  addBtn.style.cssText = 'padding:8px 14px;font-size:13px;font-weight:500;background:var(--ink);color:#fff;border:none;border-radius:var(--radius-sm);cursor:pointer;touch-action:manipulation;white-space:nowrap;';
+  addBtn.onclick = () => { if(input.value.trim()){ addDailyTask(input.value); input.value=''; } };
+  input.onkeydown = (e) => { if(e.key==='Enter'&&input.value.trim()){ addDailyTask(input.value); input.value=''; } };
+  addRow.appendChild(input);
+  addRow.appendChild(addBtn);
+  taskWrap.appendChild(taskList);
+  taskWrap.appendChild(addRow);
+  el.appendChild(taskWrap);
 
-    const taskList = wrap.querySelector(`#today-oc-${type}`);
-    tasks.forEach(t => {
-      const k2 = ocKey(day, type, t);
-      const isDone = !!ocChecked[k2];
-      const card = document.createElement('div');
-      card.className = 'task'+(isDone?' done':'');
-      card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t}</div></div>`;
-      card.onclick = () => {
-        const wasComplete = isOcComplete(day, type);
-        ocChecked[k2]=!ocChecked[k2];
-        save();
-        const nowComplete = isOcComplete(day, type);
-        if (!wasComplete && nowComplete) {
-          if (type === 'opening') launchSunshine();
-          else launchMoon();
-        }
-        renderToday();
-      };
-      taskList.appendChild(card);
-    });
-  }
+  // Shop Closed
+  const isClosed = !!shopClosed[dk];
+  const closedEl = document.createElement('div');
+  closedEl.style.cssText = \`background:\${isClosed?'#F0F5FF':'#fff'};border:\${isClosed?'2px solid #6B8FD4':'1px solid var(--ink-faint)'};border-radius:var(--radius);padding:14px 16px;margin-bottom:12px;display:flex;align-items:center;gap:14px;cursor:pointer;transition:all 0.2s;\`;
+  closedEl.innerHTML = \`
+    <div style="width:28px;height:28px;border-radius:50%;border:2px solid \${isClosed?'#6B8FD4':'var(--ink-faint)'};background:\${isClosed?'#6B8FD4':'#fff'};flex-shrink:0;display:flex;align-items:center;justify-content:center;transition:all 0.2s;">
+      \${isClosed?'<svg viewBox="0 0 12 12" fill="none" width="13" height="13"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/></svg>':''}
+    </div>
+    <div>
+      <div style="font-size:15px;font-weight:500;color:var(--ink);">🌙 Shop closed</div>
+      \${isClosed?'<div style="font-size:12px;color:#4A6BAA;margin-top:2px;">Closed up — great work today!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you\'re done for the day</div>'}
+    </div>\`;
+  closedEl.onclick = () => { shopClosed[dk]=!shopClosed[dk]; save(); if(shopClosed[dk]) launchMoon(); renderToday(); };
+  el.appendChild(closedEl);
 
-  // Helper: build task section
-  function buildTaskSection() {
-    const tasks = tasksForDay(selectedDay);
-    const isCatchupDay = CATCHUP_DAYS.has(selectedDay);
-    const dayCustom = customTasks[selectedDay] || [];
-    const doneCount = isCatchupDay ? 0 : tasks.filter(t => checked[key(t.originalDay||selectedDay, t.name)]).length
-      + dayCustom.filter(t => t.done).length;
-    const totalCount = isCatchupDay ? tasks.length : tasks.length + dayCustom.length;
-    const pct = totalCount ? Math.round(doneCount/totalCount*100) : 100;
-
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'background:#F0FAF3;border:1px solid #C0E8CC;border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
-
-    const groups = {P0:[],P1:[],P2:[]};
-    tasks.forEach(t => groups[t.priority].push({...t, isCustom:false}));
-
-    // Merge custom tasks into the same groups
-    dayCustom.forEach(t => {
-      if (groups[t.priority]) groups[t.priority].push({...t, isCustom:true, name:t.name, type:'', time:''});
-    });
-
-    const typeOrder = {'Pottery delivery':0,'Clean':1,'Organise':2,'Stock count':3,'Garden':4};
-    const sortGroup = arr => arr.sort((a,b)=>{const s=(a.sortOrder??99)-(b.sortOrder??99);return s!==0?s:(typeOrder[a.type]??99)-(typeOrder[b.type]??99);});
-    ['P0','P1','P2'].forEach(p=>sortGroup(groups[p]));
-    const pLabels = {P0:'Must do',P1:'Important',P2:'Last up'};
-    const pBg     = {P0:'#F0FAF3', P1:'#F6FCF0', P2:'#F8F8F8'};
-    const pBorder = {P0:'#C0E8CC', P1:'#D4EEB8', P2:'#E0E0E0'};
-    const pHeader = {P0:'#2A7A52', P1:'#4A8A2A', P2:'var(--ink-mid)'};
-
-    wrap.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayTasks(this)">
-        <div style="font-size:14px;font-weight:500;color:var(--ink);">Tasks</div>
-        <div style="display:flex;align-items:center;gap:8px;">
-          <span style="font-size:12px;color:var(--ink-mid);">${doneCount}/${totalCount}</span>
-          <span style="font-size:11px;color:var(--ink-mid);" class="tasks-chev">▼</span>
-        </div>
+  // Notes
+  const n = notes[dk] || {};
+  const notesWrap = document.createElement('div');
+  notesWrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);overflow:hidden;';
+  notesWrap.innerHTML = \`
+    <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayNotes(this)">
+      <div style="font-size:14px;font-weight:500;color:var(--ink);">Notes</div>
+      <span style="font-size:11px;color:var(--ink-mid);" class="notes-chev">▼</span>
+    </div>
+    <div id="today-notes-inner" style="padding:12px 14px;">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
+        <div style="font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);">Rate the day</div>
+        <div style="display:flex;gap:3px;">\${[1,2,3,4,5].map(i=>\`<span onclick="setRatingToday(\${i})" style="font-size:22px;cursor:pointer;color:\${(n.rating||0)>=i?'#F5C842':'var(--ink-faint)'};">★</span>\`).join('')}</div>
       </div>
-      <div id="today-task-inner" style="padding:0 14px 12px;">
-        <div style="background:var(--ink-faint);border-radius:99px;height:4px;margin:10px 0 4px;overflow:hidden;"><div id="today-prog-fill" style="height:100%;border-radius:99px;background:${progressColor(pct)};width:${pct}%;transition:width 0.4s;"></div></div>
-        <div style="font-size:11px;color:var(--ink-mid);margin-bottom:10px;" id="today-prog-lbl">${doneCount} of ${totalCount} tasks done</div>
-        <div id="today-task-list"></div>
-      </div>`;
-    el.appendChild(wrap);
-
-    const list = wrap.querySelector('#today-task-list');
-    if (isCatchupDay && tasks.length === 0) {
-      const e = document.createElement('div');
-      e.style.cssText = 'text-align:center;padding:20px;color:var(--ink-mid);font-size:13px;';
-      e.textContent = 'Nothing left — great work!';
-      list.appendChild(e);
-    } else {
-      ['P0','P1','P2'].forEach(p => {
-        if (!groups[p].length) return;
-
-        const sec = document.createElement('div');
-        sec.className = 'section-head';
-        sec.textContent = pLabels[p];
-        list.appendChild(sec);
-
-        groups[p].forEach(t => {
-          const card = document.createElement('div');
-          if (t.isCustom) {
-            card.className = 'task' + (t.done ? ' done' : '');
-            card.style.cssText = 'position:relative;';
-            const delBtn = document.createElement('button');
-            delBtn.style.cssText = 'position:absolute;right:10px;top:50%;transform:translateY(-50%);background:none;border:none;font-size:16px;color:var(--ink-mid);cursor:pointer;padding:4px;line-height:1;';
-            delBtn.textContent = '×';
-            delBtn.onclick = (e) => { e.stopPropagation(); deleteCustomTask(selectedDay, t.id); };
-            card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div></div>`;
-            card.appendChild(delBtn);
-            card.onclick = () => toggleCustomTask(selectedDay, t.id);
-          } else {
-            const srcDay = isCatchupDay ? t.originalDay : selectedDay;
-            const k2 = key(srcDay, t.name);
-            const isDone = !!checked[k2];
-            card.className = 'task'+(isDone?' done':'');
-            card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t.name}</div><div class="task-meta">${t.time?`<span class="badge badge-time">${t.time}</span>`:''}<span class="badge badge-type-${typeBadgeClass(t.type)}">${t.type}</span></div></div>`;
-            card.onclick = () => { checked[k2]=!checked[k2]; save(); renderToday(); renderStaff(); };
-          }
-          list.appendChild(card);
-        });
-      });
-    }
-
-    // Add task UI
-    const addEl = document.createElement('div');
-    addEl.style.cssText = 'margin-top:10px;padding-top:10px;border-top:1px dashed var(--ink-faint);';
-
-    const addLabel = document.createElement('div');
-    addLabel.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:8px;';
-    addLabel.textContent = '+ Add a task';
-
-    const input = document.createElement('input');
-    input.id = 'custom-task-input';
-    input.type = 'text';
-    input.placeholder = 'Task name…';
-    input.style.cssText = 'width:100%;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);outline:none;margin-bottom:7px;box-sizing:border-box;';
-
-    const btnRow = document.createElement('div');
-    btnRow.style.cssText = 'display:flex;gap:6px;';
-
-    const priorities = [{p:'P0',label:'Must do'},{p:'P1',label:'Important'},{p:'P2',label:'Last up'}];
-    priorities.forEach(({p, label}) => {
-      const btn = document.createElement('button');
-      btn.style.cssText = `flex:1;padding:7px 4px;font-size:11px;font-weight:500;border:1.5px solid var(--ink-faint);border-radius:var(--radius-sm);background:#fff;color:var(--ink-mid);cursor:pointer;`;
-      btn.textContent = label;
-      btn.onclick = () => addCustomTask(selectedDay, input.value, p);
-      btnRow.appendChild(btn);
-    });
-
-    addEl.appendChild(addLabel);
-    addEl.appendChild(input);
-    addEl.appendChild(btnRow);
-    wrap.querySelector('#today-task-inner').appendChild(addEl);
-  }
-  function buildNotesSection() {
-    const n = notes[selectedDay] || {};
-    const hasNotes = n.well || n.improve || n.ideas || n.rating;
-    const wrap = document.createElement('div');
-    wrap.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:12px;overflow:hidden;';
-
-    const starsHTML = `<div style="display:flex;gap:3px;">${[1,2,3,4,5].map(i=>`<span onclick="setRatingToday(${i})" style="font-size:22px;cursor:pointer;color:${(n.rating||0)>=i?'#F5C842':'var(--ink-faint)'};">★</span>`).join('')}</div>`;
-
-    wrap.innerHTML = `
-      <div style="display:flex;align-items:center;justify-content:space-between;padding:12px 14px;cursor:pointer;border-bottom:1px solid var(--ink-faint);" onclick="toggleTodayNotes(this)">
-        <div style="font-size:14px;font-weight:500;color:var(--ink);">Notes</div>
-        <span style="font-size:11px;color:var(--ink-mid);" class="notes-chev">▼</span>
-      </div>
-      <div id="today-notes-inner" style="padding:12px 14px;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:14px;">
-          <div style="font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);">Rate the day</div>
-          ${starsHTML}
-        </div>
-        <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What went well</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;" placeholder="Add notes here…" oninput="saveTodayNote('well',this.value)">${n.well||''}</textarea></div>
-        <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What could be improved</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;" placeholder="Add notes here…" oninput="saveTodayNote('improve',this.value)">${n.improve||''}</textarea></div>
-        <div><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">Ideas and shopping list</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;" placeholder="Add notes here…" oninput="saveTodayNote('ideas',this.value)">${n.ideas||''}</textarea></div>
-      </div>`;
-    el.appendChild(wrap);
-  }
-
-  // Build the page in order
-  buildOcSection('opening', 'Opening checklist', 'open', 'var(--green)');
-  buildTaskSection();
-  buildOcSection('closing', 'Closing checklist', 'close', 'var(--clay)');
-  buildNotesSection();
-}
-
-function toggleTodayTasks(hdr) {
-  const inner = document.getElementById('today-task-inner');
-  const chev = hdr.querySelector('.tasks-chev');
-  inner.style.display = inner.style.display === 'none' ? 'block' : 'none';
-  chev.style.transform = inner.style.display === 'none' ? '' : 'rotate(180deg)';
+      <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What went well</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('well',this.value)">\${n.well||''}</textarea></div>
+      <div style="margin-bottom:10px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">What could be improved</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('improve',this.value)">\${n.improve||''}</textarea></div>
+      <div><div style="font-size:10px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">Ideas &amp; shopping list</div><textarea style="width:100%;min-height:60px;padding:8px 10px;font-size:13px;font-family:inherit;color:var(--ink);background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);resize:none;outline:none;line-height:1.5;box-sizing:border-box;" placeholder="Add notes here…" oninput="saveTodayNote('ideas',this.value)">\${n.ideas||''}</textarea></div>
+    </div>\`;
+  el.appendChild(notesWrap);
 }
 
 function toggleTodayNotes(hdr) {
@@ -994,26 +574,6 @@ function toggleTodayNotes(hdr) {
   chev.style.transform = inner.style.display === 'none' ? '' : 'rotate(180deg)';
 }
 
-function saveTodayNote(field, val) {
-  if (!notes[selectedDay]) notes[selectedDay] = {};
-  notes[selectedDay][field] = val;
-  // Keep the staff view notes inputs in sync
-  const staffInput = document.getElementById('note-'+field);
-  if (staffInput) staffInput.value = val;
-  save();
-}
-
-function setRatingToday(val) {
-  if (!notes[selectedDay]) notes[selectedDay] = {};
-  notes[selectedDay].rating = notes[selectedDay].rating === val ? 0 : val;
-  renderStars(notes[selectedDay].rating);
-  save();
-  renderToday();
-}
-
-// ── RENDER: WEEKLY SUMMARY (Week tab) ──────────────────────────────────────────
-
-function renderStaff() { renderToday(); }
 
 // ── RENDER: MANAGER VIEW ──────────────────────────────────────────────────────
 function renderManager() {
@@ -1024,155 +584,126 @@ function renderManager() {
   el.innerHTML = '';
 
   const noteFields = [{key:'well',label:'What went well'},{key:'improve',label:'What could be improved'},{key:'ideas',label:'Ideas & shopping list'}];
-  const todayWd = new Date().getDay(); // 0=Sun,1=Mon...
-  const dayToWd = {Tue:2,Wed:3,Thu:4,Fri:5,Sat:6,Sun:0};
-  const dayLabels = {Tue:'Tue',Wed:'Wed',Thu:'Thu',Fri:'Fri',Sat:'Sat',Sun:'Sun'};
+  const icons = {well:'✅', improve:'💡', ideas:'🛒'};
 
+  // Get last 7 days with data (excluding today)
+  const dk = todayKey();
+  const allDateKeys = Object.keys({...dailyTasks, ...notes, ...shopOpen, ...shopClosed})
+    .filter(d => d !== dk)
+    .sort().reverse().slice(0, 14);
+
+  // Crafters from bookings tab (sum of all cached)
   const CRAFTER_TARGET = 100;
-  const totalCraftersWeek = ['Tue','Wed','Thu','Fri','Sat','Sun'].reduce((s,d) => s + (crafters[d]||0), 0);
-  const crafterPct = Math.min(100, Math.round(totalCraftersWeek / CRAFTER_TARGET * 100));
-  const crafterColor = crafterPct >= 100 ? '#1D9E75' : crafterPct >= 60 ? 'var(--amber)' : 'var(--clay)';
-  const totalEl = document.createElement('div');
-  totalEl.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;';
-  totalEl.innerHTML = `
-    <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-      <div style="font-size:13px;color:var(--ink-mid);">👥 Total crafters this week</div>
-      <div style="font-size:20px;font-weight:600;color:var(--ink);">${totalCraftersWeek}<span style="font-size:13px;font-weight:400;color:var(--ink-mid);">/${CRAFTER_TARGET}</span></div>
+  // Count crafters from this week's bookings if available
+  const weekStart = new Date(); weekStart.setDate(weekStart.getDate() - weekStart.getDay() + 2); // Tuesday
+  const weekKeys = Object.keys(crafters).filter(k => k >= weekStart.toISOString().split('T')[0] && k <= dk);
+  const totalCraftersWeek = weekKeys.reduce((s,k)=>s+(crafters[k]||0),0);
+
+  if (Object.keys(crafters).length > 0) {
+    const crafterPct = Math.min(100, Math.round(totalCraftersWeek / CRAFTER_TARGET * 100));
+    const crafterColor = crafterPct >= 100 ? '#1D9E75' : crafterPct >= 60 ? 'var(--amber)' : 'var(--clay)';
+    const totalEl = document.createElement('div');
+    totalEl.style.cssText = 'background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);padding:12px 16px;margin-bottom:16px;';
+    totalEl.innerHTML = `
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+        <div style="font-size:13px;color:var(--ink-mid);">👥 Total crafters this week</div>
+        <div style="font-size:20px;font-weight:600;color:var(--ink);">${totalCraftersWeek}<span style="font-size:13px;font-weight:400;color:var(--ink-mid);">/${CRAFTER_TARGET}</span></div>
+      </div>
+      <div style="background:var(--ink-faint);border-radius:99px;height:6px;overflow:hidden;margin-bottom:5px;">
+        <div style="height:100%;border-radius:99px;background:${crafterColor};width:${crafterPct}%;transition:width 0.4s;"></div>
+      </div>
+      <div style="font-size:11px;color:var(--ink-mid);">${crafterPct >= 100 ? '🎉 Target reached!' : `${CRAFTER_TARGET - totalCraftersWeek} to go`}</div>`;
+    el.appendChild(totalEl);
+  }
+
+  // ── Today's summary card ─────────────────────────────────────────────────
+  const todayTasks = dailyTasks[dk] || [];
+  const todayNotes = notes[dk] || {};
+  const todayOpen = !!shopOpen[dk];
+  const todayClose = !!shopClosed[dk];
+  const todayDone = todayTasks.filter(t=>t.done).length;
+  const todayLabel = new Date().toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'short'});
+
+  const todayCard = document.createElement('div');
+  todayCard.style.cssText = `background:#fff;border:1.5px solid ${(todayOpen&&todayClose)?'#1D9E75':'var(--clay)'};border-radius:var(--radius);padding:12px 14px;margin-bottom:8px;`;
+  todayCard.innerHTML = `
+    <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:8px;">Today — ${todayLabel}</div>
+    <div style="display:flex;gap:5px;flex-wrap:wrap;margin-bottom:6px;">
+      <span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;background:${todayOpen?'#E1F5EE':'#FAECE7'};color:${todayOpen?'#0F6E56':'#993C1D'};">${todayOpen?'✓ Open':'✗ Not opened'}</span>
+      <span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;background:${todayClose?'#E1F5EE':'#FAECE7'};color:${todayClose?'#0F6E56':'#993C1D'};">${todayClose?'✓ Closed':'✗ Not closed'}</span>
+      ${todayTasks.length?`<span style="font-size:10px;font-weight:500;padding:2px 6px;border-radius:3px;background:var(--ink-faint);color:var(--ink-mid);">${todayDone}/${todayTasks.length} tasks</span>`:''}
+      ${todayNotes.rating?`<span style="font-size:10px;padding:2px 6px;border-radius:3px;background:#FEF9E0;color:#92700A;">${'★'.repeat(todayNotes.rating)}</span>`:''}
     </div>
-    <div style="background:var(--ink-faint);border-radius:99px;height:6px;overflow:hidden;margin-bottom:5px;">
-      <div style="height:100%;border-radius:99px;background:${crafterColor};width:${crafterPct}%;transition:width 0.4s;"></div>
-    </div>
-    <div style="font-size:11px;color:var(--ink-mid);">${crafterPct >= 100 ? '🎉 Target reached!' : `${CRAFTER_TARGET - totalCraftersWeek} to go`}</div>`;
-  el.appendChild(totalEl);
+    ${todayTasks.length?`<div style="font-size:11px;color:var(--ink-mid);">${todayTasks.map(t=>`<span style="${t.done?'text-decoration:line-through;opacity:0.5;':''}">${t.name}</span>`).join(' · ')}</div>`:''}`;
+  el.appendChild(todayCard);
 
-  // ── 3-col day grid ──────────────────────────────────────────────────────
-  const grid = document.createElement('div');
-  grid.style.cssText = 'display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;margin-bottom:20px;';
+  // ── Past days ────────────────────────────────────────────────────────────
+  if (allDateKeys.length > 0) {
+    const pastHdr = document.createElement('div');
+    pastHdr.style.cssText = 'font-size:11px;font-weight:600;letter-spacing:0.07em;text-transform:uppercase;color:var(--ink-mid);margin:14px 0 8px;';
+    pastHdr.textContent = 'Previous days';
+    el.appendChild(pastHdr);
 
-  ['Tue','Wed','Thu','Fri','Sat','Sun'].forEach(d => {
-    const wd = dayToWd[d];
-    // Fix: treat week as Tue–Sun, where Sun wraps around after Sat
-    // Days in week order: Tue(2), Wed(3), Thu(4), Fri(5), Sat(6), Sun(0)
-    const weekOrder = [2,3,4,5,6,0];
-    const todayIdx = weekOrder.indexOf(todayWd);
-    const dayIdx   = weekOrder.indexOf(wd);
-    const isPast = todayIdx >= 0 && dayIdx < todayIdx;
-    const isToday = wd === todayWd;
-    const hasData = isPast || isToday;
-
-    const isCatchup = CATCHUP_DAYS.has(d);
-    const crafterCount = crafters[d] || 0;
-    const rating = (notes[d]||{}).rating || 0;
-
-    let smooth = false, hasIssues = false;
-
-    if (!isCatchup && hasData) {
-      const tasks = TASKS.filter(t => t.day === d);
-      const p0Tasks = tasks.filter(t => t.priority === 'P0');
-      const doneCount = tasks.filter(t => checked[key(d,t.name)]).length;
-      const p0Done = p0Tasks.filter(t => checked[key(d,t.name)]).length;
-      const pct = tasks.length ? Math.round(doneCount/tasks.length*100) : 0;
-      const allMusts = p0Done === p0Tasks.length;
-      const ocOpen = isOcComplete(d,'opening');
-      const ocClose = isOcComplete(d,'closing');
-      smooth = ocOpen && ocClose && allMusts && pct >= 80;
-      hasIssues = !ocOpen || !ocClose || !allMusts;
-
-      const outstanding = p0Tasks.filter(t => !checked[key(d,t.name)]);
-
-      let borderColor = hasData ? (smooth ? '#1D9E75' : hasIssues ? '#D85A30' : 'var(--amber)') : 'var(--ink-faint)';
-      let emoji = !hasData ? '—' : smooth ? '✨' : hasIssues ? '⚠️' : '🙂';
-      let dotBg = !hasData ? 'var(--ink-faint)' : smooth ? '#E1F5EE' : hasIssues ? '#FAECE7' : '#FAEEDA';
+    allDateKeys.forEach(dateKey => {
+      const dayTasks = dailyTasks[dateKey] || [];
+      const dayNotes = notes[dateKey] || {};
+      const dayOpen  = !!shopOpen[dateKey];
+      const dayClosed = !!shopClosed[dateKey];
+      const dayDone  = dayTasks.filter(t=>t.done).length;
+      const smooth = dayOpen && dayClosed;
+      const d = new Date(dateKey + 'T12:00:00');
+      const label = d.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'});
 
       const card = document.createElement('div');
-      card.style.cssText = `background:#fff;border:${hasData?'1.5px':'0.5px'} solid ${borderColor};border-radius:var(--radius);padding:10px 8px;text-align:center;${!hasData?'opacity:0.35;':''}`;
-
+      card.style.cssText = `background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:6px;overflow:hidden;`;
       card.innerHTML = `
-        <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:7px;">${dayLabels[d]}</div>
-        <div style="width:34px;height:34px;border-radius:50%;background:${dotBg};display:flex;align-items:center;justify-content:center;font-size:15px;margin:0 auto 7px;">${emoji}</div>
-        ${rating ? `<div style="color:#F5C842;font-size:11px;letter-spacing:-1px;margin-bottom:5px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>` : `<div style="margin-bottom:5px;height:16px;"></div>`}
-        <div style="display:flex;justify-content:center;gap:3px;flex-wrap:wrap;margin-bottom:5px;">
-          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocOpen?'#E1F5EE':'#FAECE7'};color:${ocOpen?'#0F6E56':'#993C1D'};">${ocOpen?'✓':'✗'} Open</span>
-          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocClose?'#E1F5EE':'#FAECE7'};color:${ocClose?'#0F6E56':'#993C1D'};">${ocClose?'✓':'✗'} Close</span>
+        <div style="padding:10px 14px;cursor:pointer;display:flex;align-items:center;justify-content:space-between;" onclick="this.nextElementSibling.style.display=this.nextElementSibling.style.display==='none'?'block':'none'">
+          <div style="display:flex;align-items:center;gap:8px;">
+            <span style="font-size:14px;">${smooth?'✨':dayOpen||dayClosed?'🙂':'—'}</span>
+            <div style="font-size:13px;font-weight:500;color:var(--ink);">${label}</div>
+          </div>
+          <div style="display:flex;gap:4px;align-items:center;">
+            ${dayNotes.rating?`<span style="font-size:11px;color:#F5C842;">${'★'.repeat(dayNotes.rating)}</span>`:''}
+            <span style="font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;background:${dayOpen?'#E1F5EE':'#FAECE7'};color:${dayOpen?'#0F6E56':'#993C1D'};">☀️</span>
+            <span style="font-size:10px;font-weight:500;padding:1px 5px;border-radius:3px;background:${dayClosed?'#E1F5EE':'#FAECE7'};color:${dayClosed?'#0F6E56':'#993C1D'};">🌙</span>
+            <span style="font-size:10px;color:var(--ink-mid);">▾</span>
+          </div>
         </div>
-        <div style="display:flex;justify-content:center;gap:3px;flex-wrap:wrap;margin-bottom:6px;">
-          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${allMusts?'#E1F5EE':'#FAECE7'};color:${allMusts?'#0F6E56':'#993C1D'};">${allMusts?'✓ Must-dos':'✗ '+outstanding.length+' missed'}</span>
-        </div>
-        <div style="font-size:10px;color:var(--ink-mid);">${pct}% tasks</div>
-        ${crafterCount ? `<div style="font-size:10px;color:var(--ink-mid);">👥 ${crafterCount}</div>` : ''}
-        ${outstanding.length > 0 ? `
-          <div style="margin-top:6px;text-align:left;">
-            ${outstanding.map(t=>`<div style="font-size:9px;color:#993C1D;background:#FAECE7;border-radius:3px;padding:2px 5px;margin-bottom:2px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">${t.name}</div>`).join('')}
-          </div>` : ''}`;
-      grid.appendChild(card);
+        <div style="display:none;padding:0 14px 12px;border-top:1px solid var(--ink-faint);">
+          ${dayTasks.length?`<div style="margin-top:8px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:5px;">Tasks</div>${dayTasks.map(t=>`<div style="font-size:12px;color:var(--ink);padding:2px 0;${t.done?'text-decoration:line-through;opacity:0.45;':''}">${t.done?'✓':''} ${t.name}</div>`).join('')}</div>`:''}
+          ${noteFields.map(({key:fk,label:fl})=>dayNotes[fk]?`<div style="margin-top:8px;"><div style="font-size:10px;font-weight:600;letter-spacing:0.06em;text-transform:uppercase;color:var(--ink-mid);margin-bottom:3px;">${fl}</div><div style="font-size:12px;color:var(--ink);line-height:1.5;">${dayNotes[fk]}</div></div>`:'').join('')}
+        </div>`;
+      el.appendChild(card);
+    });
+  }
 
-    } else if (isCatchup && hasData) {
-      // Catch-up day card
-      const leftover = tasksForDay(d);
-      smooth = leftover.length === 0;
-      let borderColor = smooth ? '#1D9E75' : 'var(--amber)';
-      let emoji = smooth ? '✨' : '↩';
-      let dotBg = smooth ? '#E1F5EE' : '#FAEEDA';
-      const ocOpen = isOcComplete(d,'opening');
-      const ocClose = isOcComplete(d,'closing');
-
-      const card = document.createElement('div');
-      card.style.cssText = `background:#fff;border:1.5px solid ${borderColor};border-radius:var(--radius);padding:10px 8px;text-align:center;`;
-      card.innerHTML = `
-        <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:7px;">${dayLabels[d]}</div>
-        <div style="width:34px;height:34px;border-radius:50%;background:${dotBg};display:flex;align-items:center;justify-content:center;font-size:15px;margin:0 auto 7px;">${emoji}</div>
-        ${rating ? `<div style="color:#F5C842;font-size:11px;letter-spacing:-1px;margin-bottom:5px;">${'★'.repeat(rating)}${'☆'.repeat(5-rating)}</div>` : `<div style="margin-bottom:5px;height:16px;"></div>`}
-        <div style="display:flex;justify-content:center;gap:3px;flex-wrap:wrap;margin-bottom:5px;">
-          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocOpen?'#E1F5EE':'#FAECE7'};color:${ocOpen?'#0F6E56':'#993C1D'};">${ocOpen?'✓':'✗'} Open</span>
-          <span style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${ocClose?'#E1F5EE':'#FAECE7'};color:${ocClose?'#0F6E56':'#993C1D'};">${ocClose?'✓':'✗'} Close</span>
-        </div>
-        <div style="font-size:9px;font-weight:500;padding:1px 4px;border-radius:3px;background:${smooth?'#E1F5EE':'var(--amber-light)'};color:${smooth?'#0F6E56':'var(--amber)'};margin-bottom:6px;display:inline-block;">${smooth?'✓ All clear':leftover.length+' left over'}</div>
-        ${crafterCount ? `<div style="font-size:10px;color:var(--ink-mid);">👥 ${crafterCount}</div>` : ''}`;
-      grid.appendChild(card);
-
-    } else {
-      // Future day
-      const card = document.createElement('div');
-      card.style.cssText = 'background:#fff;border:0.5px solid var(--ink-faint);border-radius:var(--radius);padding:10px 8px;text-align:center;opacity:0.35;';
-      card.innerHTML = `
-        <div style="font-size:12px;font-weight:500;color:var(--ink);margin-bottom:7px;">${dayLabels[d]}</div>
-        <div style="width:34px;height:34px;border-radius:50%;background:var(--ink-faint);margin:0 auto 12px;"></div>
-        <div style="font-size:10px;color:var(--ink-mid);">Not yet</div>`;
-      grid.appendChild(card);
-    }
-  });
-  el.appendChild(grid);
-
-  // ── Notes by category ───────────────────────────────────────────────────
+  // ── Notes summary across all dates ────────────────────────────────────────
   const notesEl = document.getElementById('mgrNotesSummary');
   let notesHTML = '';
-  noteFields.forEach(({key: fkey, label}) => {
-    const entries = ['Tue','Wed','Thu','Fri','Sat','Sun']
-      .map(d => ({d, text:(notes[d]||{})[fkey]}))
-      .filter(e => e.text);
+  noteFields.forEach(({key:fkey, label}) => {
+    const entries = Object.entries(notes)
+      .filter(([,n]) => n[fkey])
+      .sort((a,b) => b[0].localeCompare(a[0]))
+      .slice(0, 10)
+      .map(([dateKey, n]) => {
+        const d = new Date(dateKey + 'T12:00:00');
+        return {d: d.toLocaleDateString('en-GB',{day:'numeric',month:'short'}), text: n[fkey]};
+      });
     if (!entries.length) return;
-
-    const icons = {well:'✅', improve:'💡', ideas:'🛒'};
-    const icon = fkey==='well' ? '✅' : fkey==='improve' ? '💡' : '🛒';
-
+    const icon = fkey==='well'?'✅':fkey==='improve'?'💡':'🛒';
     notesHTML += `
       <div style="background:#fff;border:1px solid var(--ink-faint);border-radius:var(--radius);margin-bottom:10px;overflow:hidden;">
         <div style="padding:10px 14px 8px;border-bottom:0.5px solid var(--ink-faint);display:flex;align-items:center;gap:7px;">
           <span style="font-size:14px;">${icon}</span>
           <span style="font-size:12px;font-weight:500;color:var(--ink);">${label}</span>
         </div>
-        ${entries.map(e => `
-          <div style="display:flex;gap:10px;padding:9px 14px;border-bottom:0.5px solid var(--ink-faint);">
-            <div style="flex-shrink:0;width:28px;height:20px;background:var(--ink-faint);border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600;color:var(--ink-mid);margin-top:1px;">${e.d}</div>
-            <div style="font-size:13px;color:var(--ink);line-height:1.5;flex:1;">${e.text}</div>
-          </div>`).join('')}
+        ${entries.map(e=>`<div style="display:flex;gap:10px;padding:9px 14px;border-bottom:0.5px solid var(--ink-faint);">
+          <div style="flex-shrink:0;min-width:44px;font-size:10px;font-weight:600;color:var(--ink-mid);margin-top:2px;">${e.d}</div>
+          <div style="font-size:13px;color:var(--ink);line-height:1.5;flex:1;">${e.text}</div>
+        </div>`).join('')}
       </div>`;
   });
-  if (notesHTML) {
-    notesEl.innerHTML = `<div style="height:0.5px;background:var(--ink-faint);margin:4px 0 14px;"></div>${notesHTML}`;
-  } else {
-    notesEl.innerHTML = '';
-  }
+  notesEl.innerHTML = notesHTML ? `<div style="height:0.5px;background:var(--ink-faint);margin:4px 0 14px;"></div>${notesHTML}` : '';
 
   document.getElementById('mgrAiSummary').innerHTML =
     `<button class="ai-summary-btn" id="aiSummaryBtn" onclick="generateAiSummary()">✦ Summarise the week with AI</button>`;
@@ -1180,71 +711,11 @@ function renderManager() {
   renderHistory();
 }
 
-// ── OPEN / CLOSE ──────────────────────────────────────────────────────────────
-function renderOpenClose() {
-  const day = selectedDay==='Thu' ? 'Thu' : selectedDay;
-  const dayFullNames = {Tue:'Tuesday',Wed:'Wednesday',Thu:'Thursday',Fri:'Friday',Sat:'Saturday',Sun:'Sunday'};
-  document.getElementById('oc-day-label').textContent = dayFullNames[day]||day;
-
-  const statusEl = document.getElementById('oc-day-status');
-  statusEl.innerHTML = ['opening','closing'].map(type => {
-    const allDone = isOcComplete(day,type);
-    const label = type==='opening'?'Opening':'Closing';
-    const done = OC_TASKS[type].filter(t=>ocChecked[ocKey(day,type,t)]).length;
-    return allDone
-      ? `<span style="font-size:12px;font-weight:500;color:var(--green);background:var(--green-light);padding:3px 10px;border-radius:99px;">✓ ${label} done</span>`
-      : `<span style="font-size:12px;color:var(--ink-mid);background:var(--ink-faint);padding:3px 10px;border-radius:99px;">${label} · ${done}/${OC_TASKS[type].length}</span>`;
-  }).join('');
-
-  const el = document.getElementById('oc-list');
-  el.innerHTML = '';
-  [{type:'opening',label:'Opening checklist',color:'open'},{type:'closing',label:'Closing checklist',color:'close'}].forEach(({type,label,color}) => {
-    const tasks = OC_TASKS[type];
-    const done = tasks.filter(t=>ocChecked[ocKey(day,type,t)]).length;
-    const pct = Math.round(done/tasks.length*100);
-    const allDone = done===tasks.length;
-    const panel = document.createElement('div');
-    panel.className = 'oc-panel'+((!allDone)?' expanded':'');
-    const statusBadge = allDone
-      ? `<span style="font-size:12px;font-weight:500;color:var(--green);background:var(--green-light);padding:2px 8px;border-radius:99px;">✓ Complete</span>`
-      : `<span style="font-size:12px;color:var(--ink-mid);">${done}/${tasks.length}</span>`;
-    panel.innerHTML = `
-      <div class="oc-header" onclick="toggleOcPanel(this)">
-        <div class="oc-header-left"><div class="oc-dot ${color}"></div><div><div class="oc-title">${label}</div></div></div>
-        <div style="display:flex;align-items:center;gap:8px;">${statusBadge}<span class="oc-chevron">▼</span></div>
-      </div>
-      <div class="oc-body">
-        <div class="oc-progress-wrap"><div class="oc-progress-fill ${color}" style="width:${pct}%"></div></div>
-        <div class="oc-progress-label">${done} of ${tasks.length} done</div>
-        <div id="oc-tasks-${type}"></div>
-        <button class="reset-btn" style="margin-top:10px" onclick="resetOc('${type}')">Reset ${type} tasks</button>
-      </div>`;
-    el.appendChild(panel);
-    const taskList = panel.querySelector(`#oc-tasks-${type}`);
-    tasks.forEach(t => {
-      const k = ocKey(day,type,t);
-      const isDone = !!ocChecked[k];
-      const card = document.createElement('div');
-      card.className = 'task'+(isDone?' done':'');
-      card.innerHTML = `<div class="check"><svg class="check-icon" viewBox="0 0 12 12" fill="none"><polyline points="2,6 5,9 10,3" stroke="white" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg></div><div class="task-body"><div class="task-name">${t}</div></div>`;
-      card.onclick = () => { ocChecked[k]=!ocChecked[k]; save(); renderOpenClose(); };
-      taskList.appendChild(card);
-    });
-  });
-}
-
-function toggleOcPanel(header) { header.closest('.oc-panel').classList.toggle('expanded'); }
-
-function resetOc(type) {
-  const day = selectedDay==='Thu'?'Thu':selectedDay;
-  OC_TASKS[type].forEach(t => delete ocChecked[ocKey(day,type,t)]);
-  save(); renderOpenClose();
-}
 
 // ── RESET ALL ─────────────────────────────────────────────────────────────────
 function resetAll() {
   if (!confirm('Reset all tasks, crafter counts and notes for the week? This cannot be undone.')) return;
-  checked={}; crafters={Tue:0,Wed:0,Thu:0,Fri:0,Sat:0,Sun:0,Tue_water:0,Wed_water:0,Thu_water:0,Fri_water:0,Sat_water:0,Sun_water:0}; notes={}; ocChecked={}; customTasks={};
+  shopOpen={}; shopClosed={}; dailyTasks={}; notes={}; crafters={};
   save(); renderStaff(); renderManager();
 }
 
@@ -1273,7 +744,8 @@ async function archiveWeek() {
       },
       body: JSON.stringify({
         week_ending: weekEnding,
-        checked, crafters, notes, oc_checked: ocChecked
+        shop_open: shopOpen, shop_closed: shopClosed,
+        daily_tasks: dailyTasks, notes, crafters
       })
     });
     if (res.ok) {
@@ -2024,3 +1496,4 @@ init();
 </script>
 </body>
 </html>
+
