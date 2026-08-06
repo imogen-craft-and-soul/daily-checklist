@@ -438,7 +438,7 @@ function renderToday() {
   const dateStr = now.toLocaleDateString('en-GB', {weekday:'long', day:'numeric', month:'long'});
   const msgs = hour < 12
     ? ['Hope you have a wonderful day in the shop!','Ready to create something lovely today?','A tidy shop is a happy shop.','Another day, another chance to make something beautiful.']
-    : ['Afternoon energy — let's power through.','Great work so far today!','Almost there — finish the day strong!'];
+    : ['Afternoon energy — push through!','Great work so far today!','Almost there — finish strong!'];
   const msg = msgs[now.getDate() % msgs.length];
 
   // Booking summary for today
@@ -476,7 +476,7 @@ function renderToday() {
     </div>
     <div>
       <div style="font-size:15px;font-weight:500;color:var(--ink);">☀️ Shop open</div>
-      ${isOpen?'<div style="font-size:12px;color:#92700A;margin-top:2px;">Open for business!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you're open</div>'}
+      ${isOpen ? '<div style="font-size:12px;color:#92700A;margin-top:2px;">Open for business!</div>' : '<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when open</div>'}
     </div>`;
   openEl.onclick = () => { shopOpen[dk]=!shopOpen[dk]; save(); if(shopOpen[dk]) launchSunshine(); renderToday(); };
   el.appendChild(openEl);
@@ -541,7 +541,7 @@ function renderToday() {
     </div>
     <div>
       <div style="font-size:15px;font-weight:500;color:var(--ink);">🌙 Shop closed</div>
-      ${isClosed?'<div style="font-size:12px;color:#4A6BAA;margin-top:2px;">Closed up — great work today!</div>':'<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when you're done for the day</div>'}
+      ${isClosed ? '<div style="font-size:12px;color:#4A6BAA;margin-top:2px;">Closed up — great work today!</div>' : '<div style="font-size:12px;color:var(--ink-mid);margin-top:2px;">Tap when done for the day</div>'}
     </div>`;
   closedEl.onclick = () => { shopClosed[dk]=!shopClosed[dk]; save(); if(shopClosed[dk]) launchMoon(); renderToday(); };
   el.appendChild(closedEl);
