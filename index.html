@@ -389,12 +389,15 @@ function startRealtimeSync() {
 
 
 // ── TODAY HELPERS ────────────────────────────────────────────────────────────
-function todayKey() { return new Date().toISOString().split('T')[0]; }
+function todayKey() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
+}
 
 function selectedDk() {
   const d = new Date();
   d.setDate(d.getDate() + selectedDateOffset);
-  return d.toISOString().split('T')[0];
+  return `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}-${String(d.getDate()).padStart(2,'0')}`;
 }
 
 function addDailyTask(name) {
